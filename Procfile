@@ -1,1 +1,1 @@
-python sniper_gold_bot.py
+start: python sniper_gold_bot.py
