@@ -54,7 +54,7 @@ async def send_to_notion(price, volume, commentaire):
     print(f"✅ Envoyé : {price} USD | Vol: {volume} | {commentaire}")
 
 async def watch():
-    uri = f"wss://stream.binance.com:9443/ws/{PAIR.lower()}@kline_1m"
+    uri = f"wss://fstream.binance.com/ws/{PAIR.lower()}@kline_1m"
     async with websockets.connect(uri) as ws:
         print("Connexion à Binance Futures en cours...")
         while True:
