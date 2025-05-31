@@ -73,8 +73,10 @@ async def watch():
             trending = is_trending(candles)
             breaking = is_breaking(price)
 
-            # Log à chaque minute même sans signal
-            await send_to_notion(price, volume, "PAS DE SIGNAL")
+            # Log uniquement si signal détecté
+if trending and breaking and volume > VOLUME_THRESHOLD:
+    direction = "hausse" if k['c'] > k['o'] else "baisse"
+    await send_alert(price, volume, direction)
 
             if trending and breaking and volume > VOLUME_THRESHOLD:
                 direction = "hausse" if k['c'] > k['o'] else "baisse"
