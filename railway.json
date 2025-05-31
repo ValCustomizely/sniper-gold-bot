@@ -1,8 +1,8 @@
 {
   "build": {
-    "command": "pip install -r requirements.txt"
+    "env": {
+      "PYTHONUNBUFFERED": "1"
+    }
   },
-  "start": {
-    "command": "python sniper_gold_bot.py"
-  }
+  "start": "python sniper_gold_bot.py"
 }
