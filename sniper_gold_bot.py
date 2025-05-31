@@ -1,17 +1,21 @@
-
-# === Sniper Bot Binance Futures - XAU/USDT ===
-# Auteur : ChatGPT pour Valentin
-
-import websockets
-import asyncio
+import os
 import json
+import asyncio
+import websockets
 import datetime
+from notion_client import Client
 
+# === Paramètres ===
 PAIR = "XAUUSDT"
-THRESHOLD_LEVELS = [3320, 3307, 3285]
+THRESHOLD_LEVELS = [1300, 1387, 1285]
 VOLUME_THRESHOLD = 3000
 CANDLE_COUNT = 3
+BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
+BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
+NOTION_TOKEN = os.getenv("NOTION_API_KEY")
+NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 
+notion = Client(auth=NOTION_TOKEN)
 candles = []
 
 def is_trending(candles):
@@ -21,7 +25,7 @@ def is_trending(candles):
     return all(d == directions[0] for d in directions)
 
 def is_breaking(price):
-    return any(abs(price - level) <= 0.5 for level in THRESHOLD_LEVELS)
+    return any(abs(price - level) / level <= 0.005 for level in THRESHOLD_LEVELS)
 
 def analyze_candle(candle):
     timestamp = datetime.datetime.fromtimestamp(candle[0]/1000)
@@ -29,36 +33,48 @@ def analyze_candle(candle):
     return [timestamp, open_, high, low, close, volume]
 
 async def send_alert(price, volume, direction):
-    print(f"\n🚨 SIGNAL SNIPER DETECTÉ !")
-    print(f"Prix : {price} USDT")
-    print(f"Volume : {volume} ")
+    print("\n📢 SIGNAL SNIPER DÉTECTÉ !")
+    print(f"Prix = {price} $/oz")
+    print(f"Volume : {volume}")
     print(f"Tendance : {direction} sur {CANDLE_COUNT} bougies")
     print(f"Heure : {datetime.datetime.now().strftime('%H:%M:%S')}\n")
+    await send_to_notion(price, volume)
+
+def send_to_notion(price, volume):
+    now = datetime.datetime.utcnow().isoformat()
+    notion.pages.create(
+        parent={"database_id": NOTION_DATABASE_ID},
+        properties={
+            "Horodatage": {"date": {"start": now}},
+            "Prix": {"number": price},
+            "Volume": {"number": volume},
+            "Commentaire": {"rich_text": [{"text": {"content": "SIGNAL"}}]}
+        }
+    )
+    print(f"✅ Envoyé : {price} USD | Vol: {volume}")
 
 async def watch():
-    url = f"wss://fstream.binance.com/ws/{PAIR.lower()}@kline_1m"
-    async with websockets.connect(url) as ws:
+    uri = f"wss://stream.binance.com:9443/ws/{PAIR.lower()}@kline_1m"
+    async with websockets.connect(uri) as ws:
         print("Connexion à Binance Futures en cours...")
         while True:
             msg = await ws.recv()
-            data = json.loads(msg)
-            k = data['k']
-            if k['x']:
-                candle = analyze_candle([
-                    k['t'], k['o'], k['h'], k['l'], k['c'], k['v']
-                ])
-                candles.append(candle)
-                if len(candles) > 10:
-                    candles.pop(0)
+            k = json.loads(msg)['k']
+            candle = [
+                k['t'], k['o'], k['h'], k['l'], k['c'], k['v']
+            ]
+            candles.append(candle)
+            if len(candles) > 10:
+                candles.pop(0)
 
-                price = candle[4]
-                volume = float(k['v'])
-                trending = is_trending(candles)
-                breaking = is_breaking(price)
+            price = float(k['c'])
+            volume = float(k['v'])
+            trending = is_trending(candles)
+            breaking = is_breaking(price)
 
-                if trending and breaking and volume * 60 >= VOLUME_THRESHOLD:
-                    direction = "hausse" if candle[4] > candle[1] else "baisse"
-                    await send_alert(price, volume * 60, direction)
+            if trending and breaking and volume > VOLUME_THRESHOLD:
+                direction = "hausse" if k['c'] > k['o'] else "baisse"
+                await send_alert(price, volume, direction)
 
 if __name__ == "__main__":
     asyncio.run(watch())
