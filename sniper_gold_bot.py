@@ -15,7 +15,6 @@ BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
 NOTION_TOKEN = os.getenv("NOTION_API_KEY")
 NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 
-print(f"TOKEN utilisé : {NOTION_TOKEN}")
 notion = Client(auth=NOTION_TOKEN)
 candles = []
 
@@ -49,38 +48,49 @@ async def send_to_notion(price, volume, commentaire):
             "Horodatage": {"date": {"start": now}},
             "Prix": {"number": price},
             "Volume": {"number": volume},
-            "Commentaire": {"title": [{"text": {"content": commentaire}}]}
+            "Signal": {"title": [{"text": {"content": commentaire}}]}
         }
     )
     print(f"✅ Envoyé : {price} USD | Vol: {volume} | {commentaire}")
 
 async def watch():
-    uri = f"wss://stream.binance.com:9443/ws/btcusdt@kline_1m"
-    async with websockets.connect(uri) as ws:
-        print("Connexion à Binance Futures en cours...")
-        while True:
-            msg = await ws.recv()
-            k = json.loads(msg)['k']
-            candle = [
-                k['t'], k['o'], k['h'], k['l'], k['c'], k['v']
-            ]
-            candles.append(candle)
-            if len(candles) > 10:
-                candles.pop(0)
+    uri = f"wss://stream.binance.com:9443/ws/{PAIR.lower()}@kline_1m"
+    print("Tentative de connexion à Binance WebSocket...")
+    try:
+        async with websockets.connect(uri, ping_interval=20, ping_timeout=20) as ws:
+            print("✅ Connexion établie avec Binance Futures")
+            last_minute = None
+            while True:
+                try:
+                    msg = await asyncio.wait_for(ws.recv(), timeout=30)
+                    k = json.loads(msg)['k']
+                    candle = [k['t'], k['o'], k['h'], k['l'], k['c'], k['v']]
+                    candles.append(candle)
+                    if len(candles) > 10:
+                        candles.pop(0)
 
-            price = float(k['c'])
-            volume = float(k['v'])
-            trending = is_trending(candles)
-            breaking = is_breaking(price)
+                    price = float(k['c'])
+                    volume = float(k['v'])
+                    trending = is_trending(candles)
+                    breaking = is_breaking(price)
 
-            # Log uniquement si signal détecté
-if trending and breaking and volume > VOLUME_THRESHOLD:
-    direction = "hausse" if k['c'] > k['o'] else "baisse"
-    await send_alert(price, volume, direction)
+                    # On envoie une fois par minute
+                    timestamp = datetime.datetime.fromtimestamp(k['t'] / 1000)
+                    current_minute = timestamp.replace(second=0, microsecond=0)
+                    if last_minute != current_minute:
+                        last_minute = current_minute
 
-            if trending and breaking and volume > VOLUME_THRESHOLD:
-                direction = "hausse" if k['c'] > k['o'] else "baisse"
-                await send_alert(price, volume, direction)
+                        if trending and breaking and volume > VOLUME_THRESHOLD:
+                            direction = "hausse" if k['c'] > k['o'] else "baisse"
+                            await send_alert(price, volume, direction)
+                        else:
+                            await send_to_notion(price, volume, "PAS DE SIGNAL")
+
+                except asyncio.TimeoutError:
+                    print(f"⏳ [{datetime.datetime.now().strftime('%H:%M:%S')}] Aucun message reçu depuis 30s, WebSocket toujours actif...")
+                    continue
+    except Exception as e:
+        print("❌ Erreur WebSocket :", e)
 
 if __name__ == "__main__":
     asyncio.run(watch())
