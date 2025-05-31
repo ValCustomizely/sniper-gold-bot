@@ -80,7 +80,7 @@ async def send_to_notion(price, volume, commentaire, direction="", thresholds=No
     print(f"✅ Envoyé : {price} USD | Vol: {volume} | {commentaire}")
 
 async def watch():
-    uri = f"wss://stream.binance.com:9443/ws/{PAIR.lower()}@kline_1m"
+    uri = f"wss://fstream.binance.com/ws/{PAIR.lower()}@kline_1m"
     print("Tentative de connexion à Binance WebSocket...")
     try:
         async with websockets.connect(uri, ping_interval=20, ping_timeout=20) as ws:
