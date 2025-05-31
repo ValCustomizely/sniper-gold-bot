@@ -15,6 +15,7 @@ BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
 NOTION_TOKEN = os.getenv("NOTION_API_KEY")
 NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 
+print(f"TOKEN utilisé : {NOTION_TOKEN}")
 notion = Client(auth=NOTION_TOKEN)
 candles = []
 
