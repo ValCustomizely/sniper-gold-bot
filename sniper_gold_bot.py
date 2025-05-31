@@ -43,26 +43,40 @@ def analyze_candle(candle):
     open_, high, low, close, volume = map(float, candle[1:6])
     return [timestamp, open_, high, low, close, volume]
 
-async def send_alert(price, volume, direction):
+async def send_alert(price, volume, direction, thresholds):
     print("\n📢 SIGNAL SNIPER DÉTECTÉ !")
     print(f"Prix = {price} $/oz")
     print(f"Volume : {volume}")
     print(f"Tendance : {direction} sur {CANDLE_COUNT} bougies")
     print(f"Heure : {datetime.datetime.now().strftime('%H:%M:%S')}\n")
-    signal_label = f"SIGNAL ({direction})"
-    await send_to_notion(price, volume, signal_label)
+    await send_to_notion(price, volume, "SIGNAL", direction, thresholds)
 
-async def send_to_notion(price, volume, commentaire):
+async def send_to_notion(price, volume, commentaire, direction="", thresholds=None):
     now = datetime.datetime.utcnow().isoformat()
-    notion.pages.create(
-        parent={"database_id": NOTION_DATABASE_ID},
-        properties={
-            "Horodatage": {"date": {"start": now}},
-            "Prix": {"number": price},
-            "Volume": {"number": volume},
-            "Signal": {"title": [{"text": {"content": commentaire}}]}
-        }
-    )
+    sl = None
+    sl_suiveur = None
+
+    if commentaire == "SIGNAL" and thresholds:
+        if direction == "hausse":
+            sl = thresholds[0]
+            sl_suiveur = round(price * 1.015, 2)
+        elif direction == "baisse":
+            sl = thresholds[2]
+            sl_suiveur = round(price * 0.985, 2)
+
+    properties = {
+        "Horodatage": {"date": {"start": now}},
+        "Prix": {"number": price},
+        "Volume": {"number": volume},
+        "Signal": {"title": [{"text": {"content": commentaire}}]}
+    }
+
+    if sl is not None:
+        properties["SL"] = {"number": sl}
+    if sl_suiveur is not None:
+        properties["SL suiveur"] = {"number": sl_suiveur}
+
+    notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=properties)
     print(f"✅ Envoyé : {price} USD | Vol: {volume} | {commentaire}")
 
 async def watch():
@@ -87,7 +101,6 @@ async def watch():
                     thresholds = compute_thresholds(candles)
                     breaking = is_breaking(price, thresholds)
 
-                    # On envoie une fois par minute
                     timestamp = datetime.datetime.fromtimestamp(k['t'] / 1000)
                     current_minute = timestamp.replace(second=0, microsecond=0)
                     if last_minute != current_minute:
@@ -95,7 +108,7 @@ async def watch():
 
                         if trending and breaking and volume > VOLUME_THRESHOLD:
                             direction = "hausse" if k['c'] > k['o'] else "baisse"
-                            await send_alert(price, volume, direction)
+                            await send_alert(price, volume, direction, thresholds)
                         else:
                             await send_to_notion(price, volume, "PAS DE SIGNAL")
 
