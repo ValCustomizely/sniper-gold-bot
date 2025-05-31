@@ -38,9 +38,9 @@ async def send_alert(price, volume, direction):
     print(f"Volume : {volume}")
     print(f"Tendance : {direction} sur {CANDLE_COUNT} bougies")
     print(f"Heure : {datetime.datetime.now().strftime('%H:%M:%S')}\n")
-    await send_to_notion(price, volume)
+    await send_to_notion(price, volume, "SIGNAL")
 
-def send_to_notion(price, volume):
+async def send_to_notion(price, volume, commentaire):
     now = datetime.datetime.utcnow().isoformat()
     notion.pages.create(
         parent={"database_id": NOTION_DATABASE_ID},
@@ -48,10 +48,10 @@ def send_to_notion(price, volume):
             "Horodatage": {"date": {"start": now}},
             "Prix": {"number": price},
             "Volume": {"number": volume},
-            "Commentaire": {"rich_text": [{"text": {"content": "SIGNAL"}}]}
+            "Commentaire": {"rich_text": [{"text": {"content": commentaire}}]}
         }
     )
-    print(f"✅ Envoyé : {price} USD | Vol: {volume}")
+    print(f"✅ Envoyé : {price} USD | Vol: {volume} | {commentaire}")
 
 async def watch():
     uri = f"wss://stream.binance.com:9443/ws/{PAIR.lower()}@kline_1m"
@@ -71,6 +71,9 @@ async def watch():
             volume = float(k['v'])
             trending = is_trending(candles)
             breaking = is_breaking(price)
+
+            # Log à chaque minute même sans signal
+            await send_to_notion(price, volume, "PAS DE SIGNAL")
 
             if trending and breaking and volume > VOLUME_THRESHOLD:
                 direction = "hausse" if k['c'] > k['o'] else "baisse"
