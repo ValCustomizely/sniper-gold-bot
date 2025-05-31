@@ -7,7 +7,6 @@ from notion_client import Client
 
 # === Paramètres ===
 PAIR = "XAUUSDT"
-THRESHOLD_LEVELS = [1300, 1387, 1285]
 VOLUME_THRESHOLD = 3000
 CANDLE_COUNT = 3
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
@@ -18,14 +17,26 @@ NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 notion = Client(auth=NOTION_TOKEN)
 candles = []
 
+# === Calcul automatique des seuils techniques ===
+def compute_thresholds(candles):
+    closes = [float(c[4]) for c in candles[-20:]]
+    highs = [float(c[2]) for c in candles[-20:]]
+    lows = [float(c[3]) for c in candles[-20:]]
+
+    resistance = max(highs)
+    support = min(lows)
+    moving_avg = sum(closes) / len(closes)
+
+    return [support, moving_avg, resistance]
+
 def is_trending(candles):
     if len(candles) < CANDLE_COUNT:
         return False
     directions = ["up" if c[4] > c[1] else "down" for c in candles[-CANDLE_COUNT:]]
     return all(d == directions[0] for d in directions)
 
-def is_breaking(price):
-    return any(abs(price - level) / level <= 0.005 for level in THRESHOLD_LEVELS)
+def is_breaking(price, thresholds):
+    return any(abs(price - level) / level <= 0.005 for level in thresholds)
 
 def analyze_candle(candle):
     timestamp = datetime.datetime.fromtimestamp(candle[0]/1000)
@@ -66,13 +77,14 @@ async def watch():
                     k = json.loads(msg)['k']
                     candle = [k['t'], k['o'], k['h'], k['l'], k['c'], k['v']]
                     candles.append(candle)
-                    if len(candles) > 10:
+                    if len(candles) > 20:
                         candles.pop(0)
 
                     price = float(k['c'])
                     volume = float(k['v'])
                     trending = is_trending(candles)
-                    breaking = is_breaking(price)
+                    thresholds = compute_thresholds(candles)
+                    breaking = is_breaking(price, thresholds)
 
                     # On envoie une fois par minute
                     timestamp = datetime.datetime.fromtimestamp(k['t'] / 1000)
