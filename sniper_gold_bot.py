@@ -49,7 +49,7 @@ async def send_to_notion(price, volume, commentaire):
             "Horodatage": {"date": {"start": now}},
             "Prix": {"number": price},
             "Volume": {"number": volume},
-            "Commentaire": {"rich_text": [{"text": {"content": commentaire}}]}
+            "Commentaire": {"title": [{"text": {"content": commentaire}}]}
         }
     )
     print(f"✅ Envoyé : {price} USD | Vol: {volume} | {commentaire}")
