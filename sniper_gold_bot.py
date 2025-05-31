@@ -49,7 +49,8 @@ async def send_alert(price, volume, direction):
     print(f"Volume : {volume}")
     print(f"Tendance : {direction} sur {CANDLE_COUNT} bougies")
     print(f"Heure : {datetime.datetime.now().strftime('%H:%M:%S')}\n")
-    await send_to_notion(price, volume, "SIGNAL")
+    signal_label = f"SIGNAL ({direction})"
+    await send_to_notion(price, volume, signal_label)
 
 async def send_to_notion(price, volume, commentaire):
     now = datetime.datetime.utcnow().isoformat()
