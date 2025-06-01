@@ -1,66 +1,66 @@
-import time
-import os
+import asyncio
 import httpx
+import os
 from datetime import datetime
 from notion_client import Client
-from bs4 import BeautifulSoup
 
-NOTION_API_KEY = os.getenv("NOTION_API_KEY")
-NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
+# Initialisation du client Notion
+notion = Client(auth=os.environ["NOTION_API_KEY"])
+NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
 
-notion = Client(auth=NOTION_API_KEY)
+BARCHART_URL = "https://www.barchart.com/proxies/core-api/v1/quotes/get"
+BARCHART_PARAMS = {
+    "lists": "futures.mostActive",
+    "raw": "1",
+    "fields": "symbol,lastPrice,tradeTime,lastPriceNetChange,volume"
+}
 
-def get_gold_price_and_volume():
-    url = "https://www.barchart.com/futures/quotes/GCM25/interactive-chart"
-    headers = {"User-Agent": "Mozilla/5.0"}
+async def fetch_gold_data():
+    print(f"[fetch_gold_data] ⏳ Début de la récupération à {datetime.utcnow().isoformat()}", flush=True)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(BARCHART_URL, params=BARCHART_PARAMS, timeout=10)
+            response.raise_for_status()
+            data = response.json()
 
-    try:
-        response = httpx.get(url, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+            gold = next((item for item in data["data"] if item["symbol"] == "XAUUSD"), None)
+            if not gold:
+                print("❌ XAUUSD non trouvé dans la réponse", flush=True)
+                return
 
-        price_elem = soup.select_one("span.last-change span.last")
-        volume_elem = soup.find("span", string="Volume")
-        volume_value = volume_elem.find_next("span") if volume_elem else None
+            title = f"Signal - {datetime.utcnow().isoformat()}"
+            print(f"✅ Données XAUUSD : {gold}", flush=True)
 
-        price = float(price_elem.text.strip().replace(",", "")) if price_elem else None
-        volume = int(volume_value.text.strip().replace(",", "")) if volume_value else None
+            # Données fictives pour SL et SL suiveur (tu peux les adapter)
+            sl = round(float(gold["lastPrice"]) - 10, 2)
+            sl_suiveur = round(float(gold["lastPrice"]) - 5, 2)
 
-        return price, volume
+            page = notion.pages.create(
+                parent={"database_id": NOTION_DATABASE_ID},
+                properties={
+                    "Signal": {"title": [{"text": {"content": title}}]},
+                    "Horodatage": {"date": {"start": datetime.utcnow().isoformat()}},
+                    "Prix": {"number": float(gold["lastPrice"] or 0)},
+                    "Volume": {"number": int(gold["volume"] or 0)},
+                    "Commentaire": {"rich_text": [{"text": {"content": "Signal automatique envoyé par le bot."}}]},
+                    "SL": {"number": sl},
+                    "SL suiveur": {"number": sl_suiveur}
+                }
+            )
+            print("✅ Signal ajouté à Notion avec succès", flush=True)
+        except Exception as e:
+            print(f"❌ Erreur attrapée dans fetch_gold_data : {e}", flush=True)
 
-    except Exception as e:
-        print(f"❌ Erreur récupération données Barchart : {e}")
-        return None, None
-
-def post_to_notion(price, volume):
-    now = datetime.utcnow().isoformat()
-
-    try:
-        notion.pages.create(
-            parent={"database_id": NOTION_DATABASE_ID},
-            properties={
-                "Signal": {"title": [{"text": {"content": "Signal détecté"}}]},
-                "Horodatage": {"date": {"start": now}},
-                "Prix": {"number": price},
-                "Volume": {"number": volume},
-                "SL": {"number": price - 5},
-                "SL suiveur": {"number": price - 1.5},
-                "Commentaire": {"rich_text": []},
-            }
-        )
-        print(f"✅ Notion mis à jour à {now}")
-    except Exception as e:
-        print(f"❌ Erreur Notion API : {e}")
+async def main_loop():
+    while True:
+        print("\n🔁 Tick exécuté ", datetime.utcnow().isoformat(), flush=True)
+        await fetch_gold_data()
+        print("🔕 Tick terminé, pause de 60s\n", flush=True)
+        await asyncio.sleep(60)
 
 if __name__ == "__main__":
-    print("✅ Bot démarré")
-    while True:
-        price, volume = get_gold_price_and_volume()
-        if price and volume:
-            print(f"[{datetime.utcnow().isoformat()}] ✅ Prix: {price} | Volume: {volume}")
-            post_to_notion(price, volume)
-        else:
-            print(f"[{datetime.utcnow().isoformat()}] ❌ Données non valides")
-
-        print("🔁 Tick terminé, en attente...\n")
-        time.sleep(300)  # 5 minutes
+    print("\n🚀 Bot en exécution", datetime.utcnow().isoformat(), flush=True)
+    try:
+        asyncio.run(main_loop())
+    except Exception as e:
+        print(f"❌ Erreur critique dans le bot principal : {e}", flush=True)
