@@ -1,14 +1,5 @@
+import os
 import time
-
-if __name__ == "__main__":
-    print("✅ Bot démarré")
-    while True:
-        print("🔁 Tick... Le bot tourne toujours.")
-        time.sleep(30)
-
-
-
-"""
 import asyncio
 import httpx
 from datetime import datetime
@@ -19,54 +10,45 @@ BARCHART_PARAMS = {
     "raw": "1",
     "fields": "symbol,lastPrice,tradeTime,lastPriceNetChange,volume"
 }
-NOTION_WEBHOOK_URL = "https://api.notion.com/your-custom-webhook-url"  # Remplace avec ton vrai webhook
+NOTION_WEBHOOK_URL = os.getenv("NOTION_WEBHOOK_URL", "https://api.notion.com/your-custom-webhook-url")
+SCRAPER_INTERVAL = int(os.getenv("SCRAPER_INTERVAL", "300"))  # en secondes
 
-# 🔁 Appelle cette fonction toutes les X minutes
 async def fetch_gold_data():
     async with httpx.AsyncClient() as client:
         try:
             r = await client.get(BARCHART_URL, params=BARCHART_PARAMS, timeout=10)
             r.raise_for_status()
             data = r.json()
-            xau_data = next((item for item in data["data"] if "XAU/USD" in item["symbol"]), None)
 
-            if not xau_data:
-                print("❌ Aucune donnée XAU/USD trouvée.")
+            # Filtrer le XAU/USD
+            gold_data = next((item for item in data["data"] if item["symbol"] == "XAUUSD"), None)
+            if not gold_data:
+                print("❌ XAUUSD non trouvé")
                 return
 
-            price = xau_data["lastPrice"]
-            volume = xau_data["volume"]
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Envoie du message au webhook
+            payload = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "symbol": gold_data["symbol"],
+                "price": gold_data["lastPrice"],
+                "volume": gold_data["volume"]
+            }
 
-            print(f"[{timestamp}] Cours : {price} | Volume : {volume}")
-
-            if float(volume) > 3000:
-                await notify_notion(price, volume)
-
+            response = await client.post(NOTION_WEBHOOK_URL, json=payload)
+            print(f"✅ Données envoyées : {payload}")
+            response.raise_for_status()
         except Exception as e:
-            print(f"⚠️ Erreur lors de la récupération des données : {e}")
+            print(f"❌ Erreur dans fetch_gold_data : {e}")
 
-# 📤 Envoie une alerte via webhook Notion
-async def notify_notion(price, volume):
-    payload = {
-        "content": f"🚨 Signal sur l’or détecté :\nPrix = {price} $\nVolume = {volume} 🔥"
-    }
-    headers = {"Content-Type": "application/json"}
-    async with httpx.AsyncClient() as client:
-        try:
-            r = await client.post(NOTION_WEBHOOK_URL, json=payload, headers=headers)
-            r.raise_for_status()
-            print("✅ Notification envoyée.")
-        except Exception as e:
-            print(f"⚠️ Erreur envoi Notion : {e}")
-
-# 🔁 Boucle principale
-async def main():
-    print("🚀 Bot lancé")
+async def main_loop():
+    print("✅ Bot démarré")
     while True:
+        print(f"⏳ Tick à {datetime.utcnow().isoformat()}")
         await fetch_gold_data()
-        await asyncio.sleep(300)  # 5 minutes (300 secondes)
+        await asyncio.sleep(SCRAPER_INTERVAL)
 
 if __name__ == "__main__":
-    asyncio.run(main())
-"""
+    try:
+        asyncio.run(main_loop())
+    except KeyboardInterrupt:
+        print("🛑 Arrêt manuel du bot")
