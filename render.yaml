@@ -3,7 +3,5 @@ services:
     name: gold-scraper
     env: python
     plan: free
-    buildCommand: |
-      pip install -r requirements.txt
-      python -m playwright install chromium
+    buildCommand: "./setup.sh"
     startCommand: "python gold_scraper_render.py"
