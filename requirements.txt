@@ -1,2 +1,2 @@
-notion-client
-websockets
+requests
+beautifulsoup4
