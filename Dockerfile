@@ -1,22 +1,42 @@
-# Utilise l’image Python officielle
 FROM python:3.11-slim
 
-# Installe les dépendances système requises par Playwright
-RUN apt-get update && \
-    apt-get install -y wget gnupg curl unzip fonts-liberation libglib2.0-0 libnss3 libatk-bridge2.0-0 libxss1 libasound2 libx11-xcb1 libxcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libgtk-3-0 && \
-    apt-get clean
+# Installer les dépendances système nécessaires
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    gnupg \
+    ca-certificates \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    xdg-utils \
+    --no-install-recommends && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Crée le dossier d'app
+# Créer un répertoire de travail
 WORKDIR /app
 
-# Copie les fichiers
+# Copier les fichiers
 COPY . .
 
-# Installe les dépendances Python
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# Installer les dépendances Python
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
 
-# Installe Chromium via Playwright
+# Installer Chromium pour Playwright
 RUN playwright install chromium
 
-# Commande de lancement
+# Lancer le script Python
 CMD ["python", "gold_scraper_render.py"]
