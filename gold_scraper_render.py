@@ -8,22 +8,12 @@ from notion_client import Client
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 SCRAPER_INTERVAL = int(os.getenv("SCRAPER_INTERVAL", "60"))
+BARCHART_API_URL = "https://www.barchart.com/proxies/core-api/v1/quotes/get?symbols=GCM25&fields=lastPrice,volume"
 
 notion = Client(auth=NOTION_TOKEN)
 candles = []
 CANDLE_COUNT = 3
 VOLUME_THRESHOLD = 3000
-
-# === FONCTION DATA BARCHART API ===
-async def fetch_gold_data():
-    url = "https://www.barchart.com/proxies/core-api/v1/quotes/get"
-    params = {"symbols": "GCM25", "fields": "lastPrice,volume"}
-    async with httpx.AsyncClient() as client:
-        r = await client.get(url, params=params)
-        data = r.json()
-        last = float(data["data"][0]["lastPrice"])
-        vol = float(data["data"][0]["volume"])
-        return last, vol
 
 # === TECHNICAL RULES ===
 def compute_thresholds(candles):
@@ -44,7 +34,7 @@ def is_trending(candles):
 def is_breaking(price, thresholds):
     return any(abs(price - level) / level <= 0.005 for level in thresholds)
 
-# === NOTION LOGGING ===
+# === Notion logger ===
 async def send_to_notion(price, volume, commentaire, sl=None, sl_suiveur=None):
     now = datetime.datetime.utcnow().isoformat()
     props = {
@@ -57,16 +47,21 @@ async def send_to_notion(price, volume, commentaire, sl=None, sl_suiveur=None):
         props["SL"] = {"number": sl}
     if sl_suiveur is not None:
         props["SL suiveur"] = {"number": sl_suiveur}
+    
     notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
     print(f"✅ {now} | {price} USD | Vol {volume} | {commentaire}")
 
-# === SCRAPER LOOP ===
-async def scrape_loop():
-    print(f"▶️ Boucle démarrée avec intervalle {SCRAPER_INTERVAL} sec")
-    while True:
-        try:
-            print("⏳ Récupération des données...")
-            price, volume = await fetch_gold_data()
+# === Scraper principal ===
+async def scrape_barchart():
+    print("⏳ Récupération JSON...")
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(BARCHART_API_URL, timeout=10)
+            data = response.json()
+
+            entry = data["data"][0]
+            price = float(entry["lastPrice"])
+            volume = float(entry["volume"])
 
             now = datetime.datetime.utcnow()
             candle = [now.timestamp() * 1000, price, price, price, price, volume]
@@ -86,9 +81,14 @@ async def scrape_loop():
             else:
                 await send_to_notion(price, volume, "PAS DE SIGNAL")
 
-        except Exception as e:
-            print("❌ Erreur dans la boucle :", e)
+    except Exception as e:
+        print("❌ Erreur dans la boucle :", e)
 
+# === Runner ===
+async def scrape_loop():
+    print("▶️ Boucle démarrée avec intervalle", SCRAPER_INTERVAL, "sec")
+    while True:
+        await scrape_barchart()
         await asyncio.sleep(SCRAPER_INTERVAL)
 
 if __name__ == "__main__":
