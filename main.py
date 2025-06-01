@@ -1,67 +1,66 @@
-import asyncio
+import time
 import os
-from datetime import datetime
 import httpx
-from bs4 import BeautifulSoup
+from datetime import datetime
 from notion_client import Client
+from bs4 import BeautifulSoup
 
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 
 notion = Client(auth=NOTION_API_KEY)
 
-BARCHART_URL = "https://www.barchart.com/futures/quotes/GCM25/interactive-chart"
+def get_gold_price_and_volume():
+    url = "https://www.barchart.com/futures/quotes/GCM25/interactive-chart"
+    headers = {"User-Agent": "Mozilla/5.0"}
 
-async def fetch_gold_data():
-    print(f"[{datetime.utcnow()}] ✅ fetch_gold_data exécutée")
+    try:
+        response = httpx.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
 
-    async with httpx.AsyncClient() as client:
-        try:
-            r = await client.get(BARCHART_URL, timeout=10)
-            r.raise_for_status()
-        except Exception as e:
-            print(f"❌ Erreur HTTP : {e}")
-            return
+        price_elem = soup.select_one("span.last-change span.last")
+        volume_elem = soup.find("span", string="Volume")
+        volume_value = volume_elem.find_next("span") if volume_elem else None
 
-        soup = BeautifulSoup(r.text, "html.parser")
+        price = float(price_elem.text.strip().replace(",", "")) if price_elem else None
+        volume = int(volume_value.text.strip().replace(",", "")) if volume_value else None
 
-        try:
-            price_elem = soup.select_one(".bc-dataview .last-change .last")
-            volume_elem = soup.find("span", string="Volume").find_next("span")
+        return price, volume
 
-            price = float(price_elem.text.replace(",", ""))
-            volume = int(volume_elem.text.replace(",", ""))
+    except Exception as e:
+        print(f"❌ Erreur récupération données Barchart : {e}")
+        return None, None
 
-            print(f"📈 Prix : {price} $ | 🔊 Volume : {volume}")
+def post_to_notion(price, volume):
+    now = datetime.utcnow().isoformat()
 
-            await notion.pages.create(
-                parent={"database_id": NOTION_DATABASE_ID},
-                properties={
-                    "Signal": {
-                        "title": [{"text": {"content": f"Gold - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}}" }]
-                    },
-                    "Horodatage": {"date": {"start": datetime.utcnow().isoformat()}},
-                    "Prix": {"number": price},
-                    "Volume": {"number": volume},
-                    "Commentaire": {
-                        "rich_text": [{"text": {"content": "Auto-import Barchart"}}]
-                    },
-                    "SL": {"number": 0},
-                    "SL suiveur": {"number": 0}
-                }
-            )
-
-            print("✅ Données envoyées à Notion.")
-
-        except Exception as e:
-            print(f"❌ Erreur parsing/envoi : {e}")
-
-async def main_loop():
-    print("✅ Bot démarré")
-    while True:
-        await fetch_gold_data()
-        print("🔁 Tick terminé, en attente...\n")
-        await asyncio.sleep(300)  # toutes les 5 minutes
+    try:
+        notion.pages.create(
+            parent={"database_id": NOTION_DATABASE_ID},
+            properties={
+                "Signal": {"title": [{"text": {"content": "Signal détecté"}}]},
+                "Horodatage": {"date": {"start": now}},
+                "Prix": {"number": price},
+                "Volume": {"number": volume},
+                "SL": {"number": price - 5},
+                "SL suiveur": {"number": price - 1.5},
+                "Commentaire": {"rich_text": []},
+            }
+        )
+        print(f"✅ Notion mis à jour à {now}")
+    except Exception as e:
+        print(f"❌ Erreur Notion API : {e}")
 
 if __name__ == "__main__":
-    asyncio.run(main_loop())
+    print("✅ Bot démarré")
+    while True:
+        price, volume = get_gold_price_and_volume()
+        if price and volume:
+            print(f"[{datetime.utcnow().isoformat()}] ✅ Prix: {price} | Volume: {volume}")
+            post_to_notion(price, volume)
+        else:
+            print(f"[{datetime.utcnow().isoformat()}] ❌ Données non valides")
+
+        print("🔁 Tick terminé, en attente...\n")
+        time.sleep(300)  # 5 minutes
