@@ -7,47 +7,50 @@ from notion_client import Client
 # Initialisation du client Notion
 notion = Client(auth=os.environ["NOTION_API_KEY"])
 NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
-
-BARCHART_URL = "https://www.barchart.com/proxies/core-api/v1/quotes/get"
-BARCHART_PARAMS = {
-    "lists": "futures.mostActive",
-    "raw": "1",
-    "fields": "symbol,lastPrice,tradeTime,lastPriceNetChange,volume"
-}
+POLYGON_API_KEY = os.environ["POLYGON_API_KEY"]
+POLYGON_URL = "https://api.polygon.io/v2/aggs/ticker/XAUUSD/range/1/minute/2025-06-01/2025-06-01"
 
 async def fetch_gold_data():
     print(f"[fetch_gold_data] ⏳ Début de la récupération à {datetime.utcnow().isoformat()}", flush=True)
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(BARCHART_URL, params=BARCHART_PARAMS, timeout=10)
+            response = await client.get(POLYGON_URL, params={
+                "adjusted": "true",
+                "sort": "desc",
+                "limit": 1,
+                "apiKey": POLYGON_API_KEY
+            }, timeout=10)
             response.raise_for_status()
-            data = response.json()
+            results = response.json().get("results", [])
 
-            gold = next((item for item in data["data"] if item["symbol"] == "XAUUSD"), None)
-            if not gold:
-                print("❌ XAUUSD non trouvé dans la réponse", flush=True)
+            if not results:
+                print("❌ Aucune donnée reçue", flush=True)
                 return
 
+            candle = results[0]
+            last_price = candle["c"]
+            volume = candle["v"]
+
+            print(f"✅ Donnée : {last_price} USD | Volume : {volume}", flush=True)
+
+            sl = round(last_price - 10, 2)
+            sl_suiveur = round(last_price - 5, 2)
             title = f"Signal - {datetime.utcnow().isoformat()}"
-            print(f"✅ Données XAUUSD : {gold}", flush=True)
 
-            # Données fictives pour SL et SL suiveur (tu peux les adapter)
-            sl = round(float(gold["lastPrice"]) - 10, 2)
-            sl_suiveur = round(float(gold["lastPrice"]) - 5, 2)
-
-            page = notion.pages.create(
+            notion.pages.create(
                 parent={"database_id": NOTION_DATABASE_ID},
                 properties={
                     "Signal": {"title": [{"text": {"content": title}}]},
                     "Horodatage": {"date": {"start": datetime.utcnow().isoformat()}},
-                    "Prix": {"number": float(gold["lastPrice"] or 0)},
-                    "Volume": {"number": int(gold["volume"] or 0)},
-                    "Commentaire": {"rich_text": [{"text": {"content": "Signal automatique envoyé par le bot."}}]},
+                    "Prix": {"number": float(last_price)},
+                    "Volume": {"number": int(volume)},
+                    "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]},
                     "SL": {"number": sl},
                     "SL suiveur": {"number": sl_suiveur}
                 }
             )
-            print("✅ Signal ajouté à Notion avec succès", flush=True)
+            print("✅ Signal ajouté à Notion", flush=True)
+
         except Exception as e:
             print(f"❌ Erreur attrapée dans fetch_gold_data : {e}", flush=True)
 
