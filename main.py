@@ -16,18 +16,16 @@ async def fetch_gold_data():
         try:
             response = await client.get(POLYGON_URL, params={
                 "adjusted": "true",
-                "sort": "desc",
-                "limit": 1,
                 "apiKey": POLYGON_API_KEY
             }, timeout=10)
             response.raise_for_status()
-            results = response.json().get("results", [])
 
-            if not results:
+            candle = response.json().get("results")
+
+            if not candle:
                 print("❌ Aucune donnée reçue", flush=True)
                 return
 
-            candle = results[0]
             last_price = candle["c"]
             volume = candle["v"]
 
@@ -53,7 +51,7 @@ async def fetch_gold_data():
 
         except Exception as e:
             print(f"❌ Erreur attrapée dans fetch_gold_data : {e}", flush=True)
-
+            
 async def main_loop():
     while True:
         print("\n🔁 Tick exécuté ", datetime.utcnow().isoformat(), flush=True)
