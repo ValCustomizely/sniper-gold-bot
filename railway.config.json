@@ -1,8 +1,0 @@
-{
-  "build": {
-    "env": {
-      "PYTHONUNBUFFERED": "1"
-    }
-  },
-  "start": "python sniper_gold_bot.py"
-}
