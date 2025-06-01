@@ -4,5 +4,5 @@ services:
     env: python
     plan: free
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python gold_scraper_render.py"
     preBuildCommand: "playwright install chromium"
+    startCommand: "python gold_scraper_render.py"
