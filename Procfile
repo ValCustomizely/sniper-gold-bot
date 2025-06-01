@@ -1,1 +1,1 @@
-start: python sniper_gold_bot.py
+worker: python barchart_scraper.py
