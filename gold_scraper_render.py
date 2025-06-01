@@ -78,9 +78,8 @@ async def scrape_loop():
             continue
 
         try:
-            quote = data.get("data", [{}])[0]
-            price = float(quote.get("lastPrice", 0))
-            volume = float(quote.get("volume", 0))
+            price = float(data["bpi"]["USD"]["rate"].replace(",", ""))
+            volume = 9999  # Valeur fictive juste pour déclencher
 
             now = datetime.datetime.utcnow()
             candle = [now.timestamp() * 1000, price, price, price, price, volume]
