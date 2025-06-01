@@ -18,28 +18,21 @@ async def fetch_gold_data():
         try:
             r = await client.get(BARCHART_URL, params=BARCHART_PARAMS, timeout=10)
             r.raise_for_status()
-            data = r.json()
+            print("📥 Réponse brute Barchart :")
+            print(r.text)  # <-- Ajouté : voir le contenu brut
 
-            # Filtrer le XAU/USD
-            gold_data = next((item for item in data["data"] if item["symbol"] == "XAUUSD"), None)
+            data = r.json()  # <-- Ici ça peut planter si ce n’est pas du vrai JSON
+
+            gold_data = next((item for item in data.get("data", []) if item["symbol"] == "XAUUSD"), None)
             if not gold_data:
-                print("❌ XAUUSD non trouvé")
+                print("❌ XAUUSD non trouvé dans les données Barchart.")
                 return
 
-            # Envoie du message au webhook
-            payload = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "symbol": gold_data["symbol"],
-                "price": gold_data["lastPrice"],
-                "volume": gold_data["volume"]
-            }
+            print(f"✅ Données XAUUSD : {gold_data}")
 
-            response = await client.post(NOTION_WEBHOOK_URL, json=payload)
-            print(f"✅ Données envoyées : {payload}")
-            response.raise_for_status()
         except Exception as e:
             print(f"❌ Erreur dans fetch_gold_data : {e}")
-
+            
 async def main_loop():
     print("✅ Bot démarré")
     while True:
