@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: gold-scraper
+    env: python
+    buildCommand: |
+      pip install -r requirements.txt
+      playwright install chromium
+    startCommand: python gold_scraper_render.py
+    autoDeploy: true
