@@ -1,4 +1,2 @@
-requests
-beautifulsoup4
-notion-client
-playwright
+httpx==0.28.1
+notion-client==2.3.0
