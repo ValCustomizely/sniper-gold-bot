@@ -1,59 +1,67 @@
 import asyncio
-import httpx
+import os
 from datetime import datetime
-import sys
+import httpx
+from bs4 import BeautifulSoup
+from notion_client import Client
 
-# 🔧 Paramètres
-BARCHART_URL = "https://marketdata.websol.barchart.com/getQuote.json"
-BARCHART_PARAMS = {
-    "apikey": "TA_CLE_API",  # ← Remplace par ta vraie clé
-    "symbols": "XAUUSD"
-}
+NOTION_API_KEY = os.getenv("NOTION_API_KEY")
+NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 
-NOTION_WEBHOOK_URL = "https://api.notion.com/your_webhook_endpoint"  # ← remplace ici aussi
+notion = Client(auth=NOTION_API_KEY)
 
-# ✅ Forcer l'affichage des logs dans Render
-sys.stdout.reconfigure(line_buffering=True)
+BARCHART_URL = "https://www.barchart.com/futures/quotes/GCM25/interactive-chart"
 
-# 📡 Fonction principale
 async def fetch_gold_data():
+    print(f"[{datetime.utcnow()}] ✅ fetch_gold_data exécutée")
+
     async with httpx.AsyncClient() as client:
         try:
-            print(f"[{datetime.utcnow()}] ⏳ Requête à Barchart...", flush=True)
-            r = await client.get(BARCHART_URL, params=BARCHART_PARAMS, timeout=10)
+            r = await client.get(BARCHART_URL, timeout=10)
             r.raise_for_status()
-            data = r.json()
+        except Exception as e:
+            print(f"❌ Erreur HTTP : {e}")
+            return
 
-            gold_data = next((item for item in data["data"] if item["symbol"] == "XAUUSD"), None)
-            if not gold_data:
-                print("❌ XAUUSD non trouvé dans la réponse Barchart", flush=True)
-                return
+        soup = BeautifulSoup(r.text, "html.parser")
 
-            payload = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "symbol": gold_data["symbol"],
-                "price": gold_data["lastPrice"],
-                "volume": gold_data["volume"]
-            }
+        try:
+            price_elem = soup.select_one(".bc-dataview .last-change .last")
+            volume_elem = soup.find("span", string="Volume").find_next("span")
 
-            print(f"[{datetime.utcnow()}] ✅ Données extraites : {payload}", flush=True)
+            price = float(price_elem.text.replace(",", ""))
+            volume = int(volume_elem.text.replace(",", ""))
 
-            response = await client.post(NOTION_WEBHOOK_URL, json=payload)
-            response.raise_for_status()
-            print(f"[{datetime.utcnow()}] 📬 Données envoyées avec succès", flush=True)
+            print(f"📈 Prix : {price} $ | 🔊 Volume : {volume}")
+
+            await notion.pages.create(
+                parent={"database_id": NOTION_DATABASE_ID},
+                properties={
+                    "Signal": {
+                        "title": [{"text": {"content": f"Gold - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}}" }]
+                    },
+                    "Horodatage": {"date": {"start": datetime.utcnow().isoformat()}},
+                    "Prix": {"number": price},
+                    "Volume": {"number": volume},
+                    "Commentaire": {
+                        "rich_text": [{"text": {"content": "Auto-import Barchart"}}]
+                    },
+                    "SL": {"number": 0},
+                    "SL suiveur": {"number": 0}
+                }
+            )
+
+            print("✅ Données envoyées à Notion.")
 
         except Exception as e:
-            print(f"[{datetime.utcnow()}] ❌ Erreur dans fetch_gold_data : {e}", flush=True)
+            print(f"❌ Erreur parsing/envoi : {e}")
 
-# 🔁 Boucle infinie
-async def run_bot():
-    print("✅ Bot démarré", flush=True)
+async def main_loop():
+    print("✅ Bot démarré")
     while True:
-        print(f"[{datetime.utcnow()}] ✅ fetch_gold_data exécutée", flush=True)
         await fetch_gold_data()
-        print("🔁 Tick terminé, en attente...\n", flush=True)
-        await asyncio.sleep(60)
+        print("🔁 Tick terminé, en attente...\n")
+        await asyncio.sleep(300)  # toutes les 5 minutes
 
-# ▶️ Lancement
 if __name__ == "__main__":
-    asyncio.run(run_bot())
+    asyncio.run(main_loop())
