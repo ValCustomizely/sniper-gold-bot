@@ -1,19 +1,29 @@
 import os
 import asyncio
 import datetime
+import httpx
 from notion_client import Client
-from playwright.async_api import async_playwright
 
 # === ENV ===
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
-GOLD_URL = os.getenv("GOLD_URL", "https://www.barchart.com/futures/quotes/GCM25/interactive-chart")
 SCRAPER_INTERVAL = int(os.getenv("SCRAPER_INTERVAL", "60"))
 
 notion = Client(auth=NOTION_TOKEN)
 candles = []
 CANDLE_COUNT = 3
 VOLUME_THRESHOLD = 3000
+
+# === FONCTION DATA BARCHART API ===
+async def fetch_gold_data():
+    url = "https://www.barchart.com/proxies/core-api/v1/quotes/get"
+    params = {"symbols": "GCM25", "fields": "lastPrice,volume"}
+    async with httpx.AsyncClient() as client:
+        r = await client.get(url, params=params)
+        data = r.json()
+        last = float(data["data"][0]["lastPrice"])
+        vol = float(data["data"][0]["volume"])
+        return last, vol
 
 # === TECHNICAL RULES ===
 def compute_thresholds(candles):
@@ -34,7 +44,7 @@ def is_trending(candles):
 def is_breaking(price, thresholds):
     return any(abs(price - level) / level <= 0.005 for level in thresholds)
 
-# === Notion logger ===
+# === NOTION LOGGING ===
 async def send_to_notion(price, volume, commentaire, sl=None, sl_suiveur=None):
     now = datetime.datetime.utcnow().isoformat()
     props = {
@@ -47,25 +57,16 @@ async def send_to_notion(price, volume, commentaire, sl=None, sl_suiveur=None):
         props["SL"] = {"number": sl}
     if sl_suiveur is not None:
         props["SL suiveur"] = {"number": sl_suiveur}
-    
     notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
     print(f"✅ {now} | {price} USD | Vol {volume} | {commentaire}")
 
-# === Scraper principal ===
-async def scrape_barchart():
-    print("⏳ Scraping en cours...")
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        await page.goto(GOLD_URL, timeout=60000)
-        await page.wait_for_timeout(5000)
-
+# === SCRAPER LOOP ===
+async def scrape_loop():
+    print(f"▶️ Boucle démarrée avec intervalle {SCRAPER_INTERVAL} sec")
+    while True:
         try:
-            price_text = await page.inner_text(".bc-dataview .last-change span.last")
-            volume_text = await page.inner_text(".bc-dataview .volume span")
-
-            price = float(price_text.replace(",", ""))
-            volume = float(volume_text.replace(",", "").replace("K", "000"))
+            print("⏳ Récupération des données...")
+            price, volume = await fetch_gold_data()
 
             now = datetime.datetime.utcnow()
             candle = [now.timestamp() * 1000, price, price, price, price, volume]
@@ -86,16 +87,10 @@ async def scrape_barchart():
                 await send_to_notion(price, volume, "PAS DE SIGNAL")
 
         except Exception as e:
-            print("❌ Erreur scraping :", e)
-        await browser.close()
+            print("❌ Erreur dans la boucle :", e)
 
-# === Runner ===
-async def run_scraper():
-    print("▶️ Boucle démarrée avec intervalle", SCRAPER_INTERVAL, "sec")
-    while True:
-        await scrape_barchart()
         await asyncio.sleep(SCRAPER_INTERVAL)
 
 if __name__ == "__main__":
     print("=== DEMARRAGE gold_scraper_render.py ===")
-    asyncio.run(run_scraper())
+    asyncio.run(scrape_loop())
