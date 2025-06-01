@@ -19,16 +19,17 @@ async def fetch_gold_data():
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(BARCHART_URL, headers=headers, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, "html.parser")
+            
+        # Récupération du volume
+        volume = None
+        for label in soup.select("div.quote-block--field"):
+            label_text = label.select_one("span.quote-block__label")
+            if label_text and "Volume" in label_text.text:
+                value = label.select_one("span.quote-block__value")
+                if value:
+                    volume = int(value.text.strip().replace(",", ""))
+                    break
 
-            # Prix
-            price_tag = soup.select_one('div.bc-datatable--instrument-price > span.last-change')
-            price = float(price_tag.text.replace(',', '')) if price_tag else None
-
-            # Volume
-            volume_tag = soup.find("span", text="Volume").find_next("span")
-            volume = int(volume_tag.text.replace(',', '')) if volume_tag else None
 
             if not price or not volume:
                 print("❌ Données manquantes sur la page HTML", flush=True)
