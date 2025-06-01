@@ -8,7 +8,7 @@ from notion_client import Client
 notion = Client(auth=os.environ["NOTION_API_KEY"])
 NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
 POLYGON_API_KEY = os.environ["POLYGON_API_KEY"]
-POLYGON_URL = "https://api.polygon.io/v2/aggs/ticker/XAUUSD/range/1/minute/2025-06-01/2025-06-01"
+POLYGON_URL = "https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/minute/2025-06-01/2025-06-01"
 
 async def fetch_gold_data():
     print(f"[fetch_gold_data] ⏳ Début de la récupération à {datetime.utcnow().isoformat()}", flush=True)
