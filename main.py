@@ -5,7 +5,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from notion_client import Client
 
-# Init Notion
+# Initialisation Notion
 notion = Client(auth=os.environ["NOTION_API_KEY"])
 NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
 
@@ -39,10 +39,9 @@ async def fetch_gold_data():
                 print("❌ Échec de récupération du prix ou volume", flush=True)
                 return
 
-            # Préparation pour Notion
+            title = f"Signal - {datetime.utcnow().isoformat()}"
             sl = round(price - 10, 2)
             sl_suiveur = round(price - 5, 2)
-            title = f"Signal - {datetime.utcnow().isoformat()}"
 
             notion.pages.create(
                 parent={"database_id": NOTION_DATABASE_ID},
@@ -56,7 +55,8 @@ async def fetch_gold_data():
                     "SL suiveur": {"number": sl_suiveur}
                 }
             )
-            print("✅ Signal ajouté à Notion avec prix =", price, "et volume =", volume, flush=True)
+
+            print(f"✅ Signal ajouté à Notion : prix = {price}, volume = {volume}", flush=True)
         except Exception as e:
             print(f"❌ Erreur attrapée dans fetch_gold_data : {e}", flush=True)
 
@@ -68,7 +68,7 @@ async def main_loop():
         await asyncio.sleep(60)
 
 if __name__ == "__main__":
-    print("\n🚀 Bot en exécution", datetime.utcnow().isoformat(), flush=True)
+    print("🚀 Bot en exécution", datetime.utcnow().isoformat(), flush=True)
     try:
         asyncio.run(main_loop())
     except Exception as e:
