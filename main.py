@@ -8,7 +8,6 @@ from notion_client import Client
 notion = Client(auth=os.environ["NOTION_API_KEY"])
 NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
 POLYGON_API_KEY = os.environ["POLYGON_API_KEY"]
-POLYGON_URL = "https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/prev"
 
 # ⚙️ Seuils manuels définis ici temporairement (à intégrer via Notion ensuite)
 SEUILS_MANUELS = [
@@ -26,9 +25,12 @@ async def fetch_gold_data():
         print(f"⏸️ Marché fermé (UTC {now.hour}h), tick ignoré", flush=True)
         return
 
+    today = now.date().isoformat()
+    url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/minute/{today}/{today}"
+
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(POLYGON_URL, params={
+            response = await client.get(url, params={
                 "adjusted": "true",
                 "sort": "desc",
                 "limit": 1,
@@ -63,7 +65,7 @@ async def fetch_gold_data():
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
             props = {
-                "Signal": {"select": {"name": signal_type}},
+                "Signal": {"title": [{"text": {"content": signal_type}}]},
                 "Horodatage": {"date": {"start": now.isoformat()}},
                 "Prix": {"number": float(last_price)},
                 "Volume": {"number": int(volume)},
