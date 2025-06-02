@@ -8,32 +8,29 @@ from notion_client import Client
 notion = Client(auth=os.environ["NOTION_API_KEY"])
 NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
 POLYGON_API_KEY = os.environ["POLYGON_API_KEY"]
+SEUILS_NOTION_DATABASE_ID = os.environ.get("SEUILS_DATABASE_ID")
 
-# ⚙️ Seuils manuels complets (issus de l'analyse du 2 juin 2025)
-SEUILS_MANUELS = [
-    {"valeur": 3356.48, "type": "résistance"},  # R3
-    {"valeur": 3340.00, "type": "résistance"},  # résistance observée
-    {"valeur": 3338.01, "type": "résistance"},  # R2
-    {"valeur": 3350.00, "type": "résistance"},  # résistance observée
-    {"valeur": 3325.00, "type": "résistance"},  # cassure haussière
-    {"valeur": 3314.12, "type": "résistance"},  # R1
-    {"valeur": 3289.46, "type": "pivot"},       # point pivot
-    {"valeur": 3280.00, "type": "support"},     # support intermédiaire
-    {"valeur": 3271.76, "type": "support"},     # S1
-    {"valeur": 3265.00, "type": "support"},     # cassure baissière
-    {"valeur": 3253.29, "type": "support"},     # S2
-    {"valeur": 3245.00, "type": "support"},     # support intermédiaire
-    {"valeur": 3229.40, "type": "support"}      # S3
-]
+SEUILS_MANUELS = []
 
-CANDLE_HISTORY = []  # Stockage local pour analyse de tendance
-VOLUME_THRESHOLD = 3000
+async def charger_seuils_depuis_notion():
+    global SEUILS_MANUELS
+    try:
+        pages = notion.databases.query(database_id=SEUILS_NOTION_DATABASE_ID).get("results", [])
+        SEUILS_MANUELS = []
+        for page in pages:
+            props = page["properties"]
+            valeur = props.get("Valeur", {}).get("number")
+            type_ = props.get("Type", {}).get("select", {}).get("name")
+            if valeur is not None and type_ in {"support", "résistance", "pivot"}:
+                SEUILS_MANUELS.append({"valeur": valeur, "type": type_})
+        print(f"📥 {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
+    except Exception as e:
+        print(f"❌ Erreur chargement seuils : {e}", flush=True)
 
 async def fetch_gold_data():
     now = datetime.utcnow()
     print(f"[fetch_gold_data] ⏳ Début de la récupération à {now.isoformat()}", flush=True)
 
-    # ⏱️ Pause pendant les heures de clôture (UTC 21h à 4h)
     if now.hour >= 21 or now.hour < 4:
         print(f"⏸️ Marché fermé (UTC {now.hour}h), tick ignoré", flush=True)
         return
@@ -60,33 +57,19 @@ async def fetch_gold_data():
             last_price = candle["c"]
             volume = candle["v"]
 
-            # 🔁 Mise à jour de l'historique local
-            CANDLE_HISTORY.append(last_price)
-            if len(CANDLE_HISTORY) > 3:
-                CANDLE_HISTORY.pop(0)
-
-            # 📊 Analyse sniper stricte : cassure + volume + tendance
             signal_type = "PAS DE SIGNAL"
             seuil_casse = None
-
-            tendance_ok = len(CANDLE_HISTORY) == 3 and all(CANDLE_HISTORY[i] < CANDLE_HISTORY[i+1] for i in range(2))
-            if not tendance_ok:
-                print("📉 Tendance non confirmée", flush=True)
-            if volume < VOLUME_THRESHOLD:
-                print(f"📉 Volume insuffisant : {volume} < {VOLUME_THRESHOLD}", flush=True)
-
-            if tendance_ok and volume >= VOLUME_THRESHOLD:
-                for seuil in SEUILS_MANUELS:
-                    seuil_val = seuil["valeur"]
-                    seuil_type = seuil["type"]
-                    if seuil_type == "résistance" and last_price > seuil_val + 0.5:
-                        signal_type = "SIGNAL (hausse)"
-                        seuil_casse = seuil_val
-                        break
-                    elif seuil_type == "support" and last_price < seuil_val - 0.5:
-                        signal_type = "SIGNAL (baisse)"
-                        seuil_casse = seuil_val
-                        break
+            for seuil in SEUILS_MANUELS:
+                seuil_val = seuil["valeur"]
+                seuil_type = seuil["type"]
+                if seuil_type == "résistance" and last_price > seuil_val + 0.5:
+                    signal_type = "SIGNAL (hausse)"
+                    seuil_casse = seuil_val
+                    break
+                elif seuil_type == "support" and last_price < seuil_val - 0.5:
+                    signal_type = "SIGNAL (baisse)"
+                    seuil_casse = seuil_val
+                    break
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
@@ -114,14 +97,13 @@ async def fetch_gold_data():
         except Exception as e:
             print(f"❌ Erreur attrapée dans fetch_gold_data : {e}", flush=True)
 
-
 async def main_loop():
+    await charger_seuils_depuis_notion()
     while True:
         print("\n🔁 Tick exécuté ", datetime.utcnow().isoformat(), flush=True)
         await fetch_gold_data()
         print("🔕 Tick terminé, pause de 60s\n", flush=True)
         await asyncio.sleep(60)
-
 
 if __name__ == "__main__":
     print("\n🚀 Bot en exécution", datetime.utcnow().isoformat(), flush=True)
