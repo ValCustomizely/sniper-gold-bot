@@ -35,6 +35,8 @@ async def fetch_gold_data():
         print(f"⏸️ Marché fermé (UTC {now.hour}h), tick ignoré", flush=True)
         return
 
+    await charger_seuils_depuis_notion()
+
     today = now.date().isoformat()
     url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/minute/{today}/{today}"
 
@@ -98,7 +100,6 @@ async def fetch_gold_data():
             print(f"❌ Erreur attrapée dans fetch_gold_data : {e}", flush=True)
 
 async def main_loop():
-    await charger_seuils_depuis_notion()
     while True:
         print("\n🔁 Tick exécuté ", datetime.utcnow().isoformat(), flush=True)
         await fetch_gold_data()
