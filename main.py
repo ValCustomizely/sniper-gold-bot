@@ -3,6 +3,8 @@ import httpx
 import os
 from datetime import datetime
 from notion_client import Client
+import pandas as pd
+import numpy as np
 
 # Initialisation du client Notion
 notion = Client(auth=os.environ["NOTION_API_KEY"])
@@ -26,6 +28,44 @@ async def charger_seuils_depuis_notion():
         print(f"📥 {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
+
+def est_heure_de_mise_a_jour():
+    now = datetime.utcnow()
+    return now.hour in [4, 13] and now.minute == 0
+
+async def mettre_a_jour_seuils_auto():
+    today = datetime.utcnow().date().isoformat()
+    url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{today}/{today}"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(url, params={"adjusted": "true", "apiKey": POLYGON_API_KEY})
+            r.raise_for_status()
+            result = r.json().get("results", [])[0]
+            high = result["h"]
+            low = result["l"]
+            close = result["c"]
+            pivot = round((high + low + close) / 3, 2)
+            r1 = round((2 * pivot) - low, 2)
+            r2 = round(pivot + (high - low), 2)
+            r3 = round(high + 2 * (pivot - low), 2)
+            s1 = round((2 * pivot) - high, 2)
+            s2 = round(pivot - (high - low), 2)
+            s3 = round(low - 2 * (high - pivot), 2)
+
+            seuils = [
+                ("pivot", pivot), ("résistance", r1), ("résistance", r2), ("résistance", r3),
+                ("support", s1), ("support", s2), ("support", s3)
+            ]
+
+            for (type_, valeur) in seuils:
+                notion.pages.create(parent={"database_id": SEUILS_NOTION_DATABASE_ID}, properties={
+                    "Type": {"select": {"name": type_}},
+                    "Valeur": {"number": valeur},
+                    "Date": {"date": {"start": today}}
+                })
+            print("✅ Seuils journaliers mis à jour dans Notion", flush=True)
+    except Exception as e:
+        print(f"❌ Erreur mise à jour seuils auto : {e}", flush=True)
 
 async def fetch_gold_data():
     now = datetime.utcnow()
@@ -101,7 +141,10 @@ async def fetch_gold_data():
 
 async def main_loop():
     while True:
-        print("\n🔁 Tick exécuté ", datetime.utcnow().isoformat(), flush=True)
+        now = datetime.utcnow()
+        print("\n🔁 Tick exécuté ", now.isoformat(), flush=True)
+        if est_heure_de_mise_a_jour():
+            await mettre_a_jour_seuils_auto()
         await fetch_gold_data()
         print("🔕 Tick terminé, pause de 60s\n", flush=True)
         await asyncio.sleep(60)
