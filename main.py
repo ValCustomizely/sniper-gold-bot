@@ -9,11 +9,21 @@ notion = Client(auth=os.environ["NOTION_API_KEY"])
 NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
 POLYGON_API_KEY = os.environ["POLYGON_API_KEY"]
 
-# ⚙️ Seuils manuels définis ici temporairement (à intégrer via Notion ensuite)
+# ⚙️ Seuils manuels complets (issus de l'analyse du 2 juin 2025)
 SEUILS_MANUELS = [
-    {"valeur": 3305.0, "type": "support"},
-    {"valeur": 3320.0, "type": "résistance"},
-    {"valeur": 3287.0, "type": "support"},
+    {"valeur": 3356.48, "type": "résistance"},  # R3
+    {"valeur": 3340.00, "type": "résistance"},  # résistance observée
+    {"valeur": 3338.01, "type": "résistance"},  # R2
+    {"valeur": 3350.00, "type": "résistance"},  # résistance observée
+    {"valeur": 3325.00, "type": "résistance"},  # cassure haussière
+    {"valeur": 3314.12, "type": "résistance"},  # R1
+    {"valeur": 3289.46, "type": "pivot"},       # point pivot
+    {"valeur": 3280.00, "type": "support"},     # support intermédiaire
+    {"valeur": 3271.76, "type": "support"},     # S1
+    {"valeur": 3265.00, "type": "support"},     # cassure baissière
+    {"valeur": 3253.29, "type": "support"},     # S2
+    {"valeur": 3245.00, "type": "support"},     # support intermédiaire
+    {"valeur": 3229.40, "type": "support"}      # S3
 ]
 
 async def fetch_gold_data():
