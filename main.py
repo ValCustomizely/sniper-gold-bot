@@ -26,6 +26,9 @@ SEUILS_MANUELS = [
     {"valeur": 3229.40, "type": "support"}      # S3
 ]
 
+CANDLE_HISTORY = []  # Stockage local pour analyse de tendance
+VOLUME_THRESHOLD = 3000
+
 async def fetch_gold_data():
     now = datetime.utcnow()
     print(f"[fetch_gold_data] ⏳ Début de la récupération à {now.isoformat()}", flush=True)
@@ -57,20 +60,33 @@ async def fetch_gold_data():
             last_price = candle["c"]
             volume = candle["v"]
 
-            # Analyse du signal
+            # 🔁 Mise à jour de l'historique local
+            CANDLE_HISTORY.append(last_price)
+            if len(CANDLE_HISTORY) > 3:
+                CANDLE_HISTORY.pop(0)
+
+            # 📊 Analyse sniper stricte : cassure + volume + tendance
             signal_type = "PAS DE SIGNAL"
             seuil_casse = None
-            for seuil in SEUILS_MANUELS:
-                seuil_val = seuil["valeur"]
-                seuil_type = seuil["type"]
-                if seuil_type == "résistance" and last_price > seuil_val + 0.5:
-                    signal_type = "SIGNAL (hausse)"
-                    seuil_casse = seuil_val
-                    break
-                elif seuil_type == "support" and last_price < seuil_val - 0.5:
-                    signal_type = "SIGNAL (baisse)"
-                    seuil_casse = seuil_val
-                    break
+
+            tendance_ok = len(CANDLE_HISTORY) == 3 and all(CANDLE_HISTORY[i] < CANDLE_HISTORY[i+1] for i in range(2))
+            if not tendance_ok:
+                print("📉 Tendance non confirmée", flush=True)
+            if volume < VOLUME_THRESHOLD:
+                print(f"📉 Volume insuffisant : {volume} < {VOLUME_THRESHOLD}", flush=True)
+
+            if tendance_ok and volume >= VOLUME_THRESHOLD:
+                for seuil in SEUILS_MANUELS:
+                    seuil_val = seuil["valeur"]
+                    seuil_type = seuil["type"]
+                    if seuil_type == "résistance" and last_price > seuil_val + 0.5:
+                        signal_type = "SIGNAL (hausse)"
+                        seuil_casse = seuil_val
+                        break
+                    elif seuil_type == "support" and last_price < seuil_val - 0.5:
+                        signal_type = "SIGNAL (baisse)"
+                        seuil_casse = seuil_val
+                        break
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
