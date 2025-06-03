@@ -291,7 +291,7 @@ async def fetch_gold_data():
                 pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["type"] == "pivot"), None)
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if get_nom_seuil(s["valeur"]) == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if get_nom_seuil(s["valeur"]) == "S1"), None)
-
+        try:
             if pivot and r1 and pivot < last_price < r1:
                 signal_type = "SIGNAL (hausse) - 🚧 Entre Pivot et R1 📈"
             elif pivot and s1 and s1 < last_price < pivot:
