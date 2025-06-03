@@ -128,11 +128,11 @@ async def fetch_gold_data():
                 seuil_val = seuil["valeur"]
                 seuil_type = seuil["type"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
-                    signal_type = f"SIGNAL (hausse) - 📈 Cassure {get_nom_seuil(seuil_val)} (achat)"
+                    signal_type = f"📈 Cassure {get_nom_seuil(seuil_val)}"
                     seuil_casse = seuil_val
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
-                    signal_type = f"SIGNAL (baisse) - 📉 Cassure {get_nom_seuil(seuil_val)} (short)"
+                    signal_type = f"📉 Cassure {get_nom_seuil(seuil_val)}"
                     seuil_casse = seuil_val
                     break
 
@@ -142,9 +142,9 @@ async def fetch_gold_data():
                 s1 = sorted([s["valeur"] for s in SEUILS_MANUELS if s["type"] == "support"])[-1] if any(s["type"] == "support" for s in SEUILS_MANUELS) else None
 
                 if pivot and r1 and pivot < last_price < r1:
-                    signal_type = "SIGNAL (hausse) - 🚧 Entre Pivot et R1 📈"
+                    signal_type = "🚧📈 Entre Pivot et R1 "
                 elif pivot and s1 and s1 < last_price < pivot:
-                    signal_type = "SIGNAL (baisse) - 🚧 Entre Pivot et S1 📉"
+                    signal_type = "🚧📉 Entre Pivot et S1 "
 
             if not signal_type:
                 print("❌ Aucun signal détecté (zone neutre)", flush=True)
