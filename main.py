@@ -156,6 +156,7 @@ async def fetch_gold_data():
             print(f"❌ Erreur attrapée dans fetch_gold_data : {e}", flush=True)
 
 async def main_loop():
+    await mettre_a_jour_seuils_auto()
     while True:
         now = datetime.utcnow()
         print("\n🔁 Tick exécuté ", now.isoformat(), flush=True)
