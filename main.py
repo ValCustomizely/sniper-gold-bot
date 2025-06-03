@@ -33,7 +33,7 @@ async def charger_seuils_depuis_notion():
 def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
     current_key = f"{now.date().isoformat()}_{now.hour}"
-    if now.strftime("%H:%M") in ["04:00", "13:00"] and current_key not in DERNIERE_MAJ_HORAIRES:
+    if now.hour in [4, 13] and current_key not in DERNIERE_MAJ_HORAIRES:
         DERNIERE_MAJ_HORAIRES.add(current_key)
         return True
     return False
@@ -61,6 +61,18 @@ async def mettre_a_jour_seuils_auto():
                 ("pivot", pivot), ("résistance", r1), ("résistance", r2), ("résistance", r3),
                 ("support", s1), ("support", s2), ("support", s3)
             ]
+
+            # Supprimer les anciens seuils du jour
+            try:
+                old_pages = notion.databases.query(
+                    database_id=SEUILS_NOTION_DATABASE_ID,
+                    filter={"property": "Date", "date": {"equals": today}}
+                ).get("results", [])
+                for page in old_pages:
+                    notion.pages.update(page_id=page["id"], archived=True)
+                print(f"🗑️ Anciennes valeurs supprimées ({len(old_pages)})", flush=True)
+            except Exception as e:
+                print(f"❌ Erreur suppression anciennes valeurs : {e}", flush=True)
 
             for (type_, valeur) in seuils:
                 notion.pages.create(parent={"database_id": SEUILS_NOTION_DATABASE_ID}, properties={
