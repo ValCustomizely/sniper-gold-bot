@@ -26,7 +26,7 @@ async def charger_seuils_depuis_notion():
             type_ = props.get("Type", {}).get("select", {}).get("name")
             if valeur is not None and type_ in {"support", "résistance", "pivot"}:
                 SEUILS_MANUELS.append({"valeur": valeur, "type": type_})
-        print(f"📅 {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
+        print(f"🗕️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
 
@@ -124,7 +124,7 @@ async def fetch_gold_data():
             last_price = candle["c"]
             volume = candle["v"]
 
-            signal_type = "PAS DE SIGNAL"
+            signal_type = None
             seuil_casse = None
             label = None
 
@@ -132,39 +132,37 @@ async def fetch_gold_data():
                 seuil_val = seuil["valeur"]
                 seuil_type = seuil["type"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
-                    signal_type = "SIGNAL (hausse)"
+                    signal_type = f"📈 Cassure {get_nom_seuil(seuil_val)}"
                     seuil_casse = seuil_val
-                    label = f"📈 Cassure {get_nom_seuil(seuil_val)} (achat)"
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
-                    signal_type = "SIGNAL (baisse)"
+                    signal_type = f"📉 Cassure {get_nom_seuil(seuil_val)}"
                     seuil_casse = seuil_val
-                    label = f"📉 Cassure {get_nom_seuil(seuil_val)} (short)"
                     break
 
-            if signal_type == "PAS DE SIGNAL" and SEUILS_MANUELS:
+            if signal_type is None and SEUILS_MANUELS:
                 pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["type"] == "pivot"), None)
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if get_nom_seuil(s["valeur"]) == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if get_nom_seuil(s["valeur"]) == "S1"), None)
 
                 if pivot and r1 and pivot < last_price < (r1 - 0.5):
-                    signal_type = "SIGNAL (hausse)"
-                    label = "🚧 Entre Pivot et R1 📈"
+                    signal_type = "🚧📈 Entre Pivot et R1 "
                 elif pivot and s1 and pivot > last_price > (s1 + 0.5):
-                    signal_type = "SIGNAL (baisse)"
-                    label = "🚧 Entre Pivot et S1 📉"
+                    signal_type = "🚧📉 Entre Pivot et S1 "
+                else:
+                    signal_type = f"OBSERVATION ({last_price})"
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
             props = {
-                "Signal": {"title": [{"text": {"content": label or signal_type}}]},
+                "Signal": {"title": [{"text": {"content": signal_type}}]},
                 "Horodatage": {"date": {"start": now.isoformat()}},
                 "Prix": {"number": float(last_price)},
                 "Volume": {"number": int(volume)},
-                "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]},
+                "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]}
             }
 
-            if signal_type != "PAS DE SIGNAL" and seuil_casse:
+            if "SIGNAL" in signal_type and seuil_casse:
                 if "hausse" in signal_type:
                     sl = round(seuil_casse - 1, 2)
                     sl_suiveur = round(last_price - 3, 2)
