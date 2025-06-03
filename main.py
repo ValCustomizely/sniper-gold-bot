@@ -196,3 +196,4 @@ if __name__ == "__main__":
         asyncio.run(main_loop())
     except Exception as e:
         print(f"❌ Erreur critique dans le bot principal : {e}", flush=True)
+ 
