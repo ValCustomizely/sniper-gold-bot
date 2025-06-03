@@ -13,6 +13,7 @@ POLYGON_API_KEY = os.environ["POLYGON_API_KEY"]
 SEUILS_NOTION_DATABASE_ID = os.environ.get("SEUILS_DATABASE_ID")
 
 SEUILS_MANUELS = []
+DERNIERE_MAJ_HORAIRES = set()
 
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
@@ -29,9 +30,13 @@ async def charger_seuils_depuis_notion():
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
 
-def est_heure_de_mise_a_jour():
+def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
-    return now.hour in [4, 13] and now.minute == 0
+    current_key = f"{now.date().isoformat()}_{now.hour}"
+    if now.hour in [4, 13] and current_key not in DERNIERE_MAJ_HORAIRES:
+        DERNIERE_MAJ_HORAIRES.add(current_key)
+        return True
+    return False
 
 async def mettre_a_jour_seuils_auto():
     today = datetime.utcnow().date().isoformat()
@@ -143,7 +148,7 @@ async def main_loop():
     while True:
         now = datetime.utcnow()
         print("\n🔁 Tick exécuté ", now.isoformat(), flush=True)
-        if est_heure_de_mise_a_jour():
+        if est_heure_de_mise_a_jour_solide():
             await mettre_a_jour_seuils_auto()
         await fetch_gold_data()
         print("🔕 Tick terminé, pause de 60s\n", flush=True)
