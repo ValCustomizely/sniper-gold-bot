@@ -33,7 +33,7 @@ async def charger_seuils_depuis_notion():
 def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
     current_key = f"{now.date().isoformat()}_{now.hour}"
-    if now.hour in [4, 13] and current_key not in DERNIERE_MAJ_HORAIRES:
+    if now.strftime("%H:%M") in ["04:00", "13:00"] and current_key not in DERNIERE_MAJ_HORAIRES:
         DERNIERE_MAJ_HORAIRES.add(current_key)
         return True
     return False
