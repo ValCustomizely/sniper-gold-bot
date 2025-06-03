@@ -10,7 +10,7 @@ import numpy as np
 notion = Client(auth=os.environ["NOTION_API_KEY"])
 NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
 POLYGON_API_KEY = os.environ["POLYGON_API_KEY"]
-SEUILS_NOTION_DATABASE_ID = os.environ.get("SEUILS_DATABASE_ID")
+SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 
 SEUILS_MANUELS = []
 DERNIERE_MAJ_HORAIRES = set()
@@ -18,7 +18,7 @@ DERNIERE_MAJ_HORAIRES = set()
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
     try:
-        pages = notion.databases.query(database_id=SEUILS_NOTION_DATABASE_ID).get("results", [])
+        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID).get("results", [])
         SEUILS_MANUELS = []
         for page in pages:
             props = page["properties"]
@@ -26,7 +26,7 @@ async def charger_seuils_depuis_notion():
             type_ = props.get("Type", {}).get("select", {}).get("name")
             if valeur is not None and type_ in {"support", "résistance", "pivot"}:
                 SEUILS_MANUELS.append({"valeur": valeur, "type": type_})
-        print(f"📥 {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
+        print(f"📅 {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
 
@@ -62,7 +62,6 @@ async def mettre_a_jour_seuils_auto():
                 ("support", s1), ("support", s2), ("support", s3)
             ]
 
-            # Supprimer les anciens seuils du jour
             try:
                 old_pages = notion.databases.query(
                     database_id=SEUILS_DATABASE_ID,
@@ -78,7 +77,7 @@ async def mettre_a_jour_seuils_auto():
                 notion.pages.create(parent={"database_id": SEUILS_DATABASE_ID}, properties={
                     "Type": {"select": {"name": type_}},
                     "Valeur": {"number": valeur},
-                    "Date": {"date": {"start": f"{today}T00:00:00.000Z"}}
+                    "Date": {"date": {"start": today}}
                 })
             print("✅ Seuils journaliers mis à jour dans Notion", flush=True)
     except Exception as e:
