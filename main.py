@@ -65,7 +65,7 @@ async def mettre_a_jour_seuils_auto():
             try:
                 old_pages = notion.databases.query(
                     database_id=SEUILS_DATABASE_ID,
-                    filter={"property": "Date", "date": {"equals": today}}
+                    filter={"property": "Date", "date": {"equals": f"{today}T00:00:00.000Z"}}
                 ).get("results", [])
                 for page in old_pages:
                     notion.pages.update(page_id=page["id"], archived=True)
