@@ -142,19 +142,27 @@ async def fetch_gold_data():
                     label = f"📉 Cassure {get_nom_seuil(seuil_val)} (short)"
                     break
 
-            if signal_type == "SIGNAL (hausse)" and label is None:
-                label = "🚧 Entre Pivot et R1 📈"
-            elif signal_type == "SIGNAL (baisse)" and label is None:
-                label = "🚧 Entre Pivot et S1 📉"
+            if signal_type == "PAS DE SIGNAL" and SEUILS_MANUELS:
+                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["type"] == "pivot"), None)
+                r1 = next((s["valeur"] for s in SEUILS_MANUELS if get_nom_seuil(s["valeur"]) == "R1"), None)
+                s1 = next((s["valeur"] for s in SEUILS_MANUELS if get_nom_seuil(s["valeur"]) == "S1"), None)
+
+                if pivot and r1 and pivot < last_price < (r1 - 0.5):
+                    signal_type = "SIGNAL (hausse)"
+                    label = "🚧 Entre Pivot et R1 📈"
+                elif pivot and s1 and pivot > last_price > (s1 + 0.5):
+                    signal_type = "SIGNAL (baisse)"
+                    label = "🚧 Entre Pivot et S1 📉"
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
             props = {
-                "Signal": {"title": [{"text": {"content": label or signal_type}}]},
+                "Signal": {"title": [{"text": {"content": signal_type}}]},
                 "Horodatage": {"date": {"start": now.isoformat()}},
                 "Prix": {"number": float(last_price)},
                 "Volume": {"number": int(volume)},
                 "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]},
+                "Label seuil": {"rich_text": [{"text": {"content": label or "-"}}]}
             }
 
             if signal_type != "PAS DE SIGNAL" and seuil_casse:
