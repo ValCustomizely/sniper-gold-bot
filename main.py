@@ -38,6 +38,15 @@ def est_heure_de_mise_a_jour_solide():
         return True
     return False
 
+def get_nom_seuil(valeur):
+    seuils_tries = sorted(SEUILS_MANUELS, key=lambda x: abs(x["valeur"] - valeur))
+    if seuils_tries:
+        plus_proche = seuils_tries[0]["valeur"]
+        for nom, seuil in zip(["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"], sorted([s["valeur"] for s in SEUILS_MANUELS])):
+            if abs(valeur - seuil) < 0.1:
+                return nom
+    return f"{valeur:.2f}"
+
 async def mettre_a_jour_seuils_auto():
     today = datetime.utcnow().date().isoformat()
     url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{today}/{today}"
@@ -65,7 +74,7 @@ async def mettre_a_jour_seuils_auto():
             try:
                 old_pages = notion.databases.query(
                     database_id=SEUILS_DATABASE_ID,
-                    filter={"property": "Date", "date": {"equals": f"{today}T00:00:00.000Z"}}
+                    filter={"property": "Date", "date": {"equals": today}}
                 ).get("results", [])
                 for page in old_pages:
                     notion.pages.update(page_id=page["id"], archived=True)
@@ -77,7 +86,7 @@ async def mettre_a_jour_seuils_auto():
                 notion.pages.create(parent={"database_id": SEUILS_DATABASE_ID}, properties={
                     "Type": {"select": {"name": type_}},
                     "Valeur": {"number": valeur},
-                    "Date": {"date": {"start": f"{today}T00:00:00.000Z"}}
+                    "Date": {"date": {"start": today}}
                 })
             print("✅ Seuils journaliers mis à jour dans Notion", flush=True)
     except Exception as e:
@@ -87,7 +96,7 @@ async def fetch_gold_data():
     now = datetime.utcnow()
     print(f"[fetch_gold_data] ⏳ Début de la récupération à {now.isoformat()}", flush=True)
 
-    if now.hour >= 21 or now.hour < 3:
+    if now.hour >= 21 or now.hour < 4:
         print(f"⏸️ Marché fermé (UTC {now.hour}h), tick ignoré", flush=True)
         return
 
@@ -117,17 +126,26 @@ async def fetch_gold_data():
 
             signal_type = "PAS DE SIGNAL"
             seuil_casse = None
+            label = None
+
             for seuil in SEUILS_MANUELS:
                 seuil_val = seuil["valeur"]
                 seuil_type = seuil["type"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
                     signal_type = "SIGNAL (hausse)"
                     seuil_casse = seuil_val
+                    label = f"📈 Cassure {get_nom_seuil(seuil_val)} (achat)"
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     signal_type = "SIGNAL (baisse)"
                     seuil_casse = seuil_val
+                    label = f"📉 Cassure {get_nom_seuil(seuil_val)} (short)"
                     break
+
+            if signal_type == "SIGNAL (hausse)" and label is None:
+                label = "🚧 Entre Pivot et R1 📈"
+            elif signal_type == "SIGNAL (baisse)" and label is None:
+                label = "🚧 Entre Pivot et S1 📉"
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
@@ -136,7 +154,8 @@ async def fetch_gold_data():
                 "Horodatage": {"date": {"start": now.isoformat()}},
                 "Prix": {"number": float(last_price)},
                 "Volume": {"number": int(volume)},
-                "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]}
+                "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]},
+                "Label seuil": {"rich_text": [{"text": {"content": label or "-"}}]}
             }
 
             if signal_type != "PAS DE SIGNAL" and seuil_casse:
@@ -156,7 +175,6 @@ async def fetch_gold_data():
             print(f"❌ Erreur attrapée dans fetch_gold_data : {e}", flush=True)
 
 async def main_loop():
-    await mettre_a_jour_seuils_auto()
     while True:
         now = datetime.utcnow()
         print("\n🔁 Tick exécuté ", now.isoformat(), flush=True)
