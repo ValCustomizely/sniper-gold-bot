@@ -65,7 +65,7 @@ async def mettre_a_jour_seuils_auto():
             # Supprimer les anciens seuils du jour
             try:
                 old_pages = notion.databases.query(
-                    database_id=SEUILS_NOTION_DATABASE_ID,
+                    database_id=SEUILS_DATABASE_ID,
                     filter={"property": "Date", "date": {"equals": today}}
                 ).get("results", [])
                 for page in old_pages:
