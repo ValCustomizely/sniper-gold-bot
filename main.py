@@ -75,7 +75,7 @@ async def mettre_a_jour_seuils_auto():
                 print(f"❌ Erreur suppression anciennes valeurs : {e}", flush=True)
 
             for (type_, valeur) in seuils:
-                notion.pages.create(parent={"database_id": SEUILS_NOTION_DATABASE_ID}, properties={
+                notion.pages.create(parent={"database_id": SEUILS_DATABASE_ID}, properties={
                     "Type": {"select": {"name": type_}},
                     "Valeur": {"number": valeur},
                     "Date": {"date": {"start": f"{today}T00:00:00.000Z"}}
