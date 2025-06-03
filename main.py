@@ -78,7 +78,7 @@ async def mettre_a_jour_seuils_auto():
                 notion.pages.create(parent={"database_id": SEUILS_NOTION_DATABASE_ID}, properties={
                     "Type": {"select": {"name": type_}},
                     "Valeur": {"number": valeur},
-                    "Date": {"date": {"start": today}}
+                    "Date": {"date": {"start": f"{today}T00:00:00.000Z"}}
                 })
             print("✅ Seuils journaliers mis à jour dans Notion", flush=True)
     except Exception as e:
