@@ -157,12 +157,11 @@ async def fetch_gold_data():
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
             props = {
-                "Signal": {"title": [{"text": {"content": signal_type}}]},
+                "Label seuil": {"rich_text": [{"text": {"content": label or "-"}}]}
                 "Horodatage": {"date": {"start": now.isoformat()}},
                 "Prix": {"number": float(last_price)},
                 "Volume": {"number": int(volume)},
                 "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]},
-                "Label seuil": {"rich_text": [{"text": {"content": label or "-"}}]}
             }
 
             if signal_type != "PAS DE SIGNAL" and seuil_casse:
