@@ -87,7 +87,7 @@ async def fetch_gold_data():
     now = datetime.utcnow()
     print(f"[fetch_gold_data] ⏳ Début de la récupération à {now.isoformat()}", flush=True)
 
-    if now.hour >= 21 or now.hour < 4:
+    if now.hour >= 21 or now.hour < 3:
         print(f"⏸️ Marché fermé (UTC {now.hour}h), tick ignoré", flush=True)
         return
 
