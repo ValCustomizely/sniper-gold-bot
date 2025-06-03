@@ -1,6 +1,4 @@
-import asyncio import httpx import os from datetime import datetime from notion_client import Client import pandas as pd import numpy as np
-
-Initialisation du client Notion
+import asyncio import httpx import os from datetime import datetime from notion_client import Client
 
 notion = Client(auth=os.environ["NOTION_API_KEY"]) NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"] POLYGON_API_KEY = os.environ["POLYGON_API_KEY"] SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 
@@ -85,22 +83,19 @@ async with httpx.AsyncClient() as client:
                 seuil_casse = seuil_val
                 break
 
-        if signal_type is None and SEUILS_MANUELS:
-            try:
-                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["type"] == "pivot"), None)
-                r1 = next((s["valeur"] for s in SEUILS_MANUELS if get_nom_seuil(s["valeur"]) == "R1"), None)
-                s1 = next((s["valeur"] for s in SEUILS_MANUELS if get_nom_seuil(s["valeur"]) == "S1"), None)
+        if signal_type is None:
+            pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["type"] == "pivot"), None)
+            r1 = sorted([s["valeur"] for s in SEUILS_MANUELS if s["type"] == "résistance"])[0] if any(s["type"] == "résistance" for s in SEUILS_MANUELS) else None
+            s1 = sorted([s["valeur"] for s in SEUILS_MANUELS if s["type"] == "support"])[-1] if any(s["type"] == "support" for s in SEUILS_MANUELS) else None
 
-                if r1 and pivot and pivot < last_price < r1:
-                    signal_type = "SIGNAL (hausse) - 🚧 Entre Pivot et R1 📈"
-                elif s1 and pivot and s1 < last_price < pivot:
-                    signal_type = "SIGNAL (baisse) - 🚧 Entre Pivot et S1 📉"
-                elif r1 and s1 and s1 < last_price < r1:
-                    signal_type = "SIGNAL - ⚖️ Entre S1 et R1 (zone neutre)"
-                else:
-                    signal_type = f"❌ AUCUN SIGNAL ({last_price})"
-            except Exception as e:
-                print(f"❌ Erreur dans la détection du signal intermédiaire : {e}", flush=True)
+            if pivot and r1 and pivot < last_price < r1:
+                signal_type = "SIGNAL (hausse) - 🚧 Entre Pivot et R1 📈"
+            elif pivot and s1 and s1 < last_price < pivot:
+                signal_type = "SIGNAL (baisse) - 🚧 Entre Pivot et S1 📉"
+
+        if not signal_type:
+            print("❌ Aucun signal détecté (zone neutre)", flush=True)
+            return
 
         print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
@@ -112,15 +107,13 @@ async with httpx.AsyncClient() as client:
             "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]}
         }
 
-        if "SIGNAL" in signal_type and seuil_casse:
+        if seuil_casse:
             if "hausse" in signal_type:
-                sl = round(seuil_casse - 1, 2)
-                sl_suiveur = round(last_price - 3, 2)
+                props["SL"] = {"number": round(seuil_casse - 1, 2)}
+                props["SL suiveur"] = {"number": round(last_price - 3, 2)}
             else:
-                sl = round(seuil_casse + 1, 2)
-                sl_suiveur = round(last_price + 3, 2)
-            props["SL"] = {"number": sl}
-            props["SL suiveur"] = {"number": sl_suiveur}
+                props["SL"] = {"number": round(seuil_casse + 1, 2)}
+                props["SL suiveur"] = {"number": round(last_price + 3, 2)}
 
         notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
         print("✅ Signal ajouté à Notion", flush=True)
