@@ -23,13 +23,22 @@ async def charger_seuils_depuis_notion():
             type_ = props.get("Type", {}).get("select", {}).get("name")
             if valeur is not None and type_ in {"support", "résistance", "pivot"}:
                 SEUILS_MANUELS.append({"valeur": valeur, "type": type_})
-        print(f"🗅️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
+        print(f"🗕️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
 
 def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
     return now.hour == 4 and f"{now.date().isoformat()}_4" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_4")
+
+def get_nom_seuil(valeur):
+    seuils_tries = sorted(SEUILS_MANUELS, key=lambda x: abs(x["valeur"] - valeur))
+    if seuils_tries:
+        plus_proche = seuils_tries[0]["valeur"]
+        for nom, seuil in zip(["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"], sorted([s["valeur"] for s in SEUILS_MANUELS])):
+            if abs(valeur - seuil) < 0.1:
+                return nom
+    return f"{valeur:.2f}"
 
 async def mettre_a_jour_seuils_auto():
     today = datetime.utcnow().date().isoformat()
@@ -114,17 +123,14 @@ async def fetch_gold_data():
             for seuil in SEUILS_MANUELS:
                 seuil_val = seuil["valeur"]
                 seuil_type = seuil["type"]
-                nom_seuil = None
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
-                    nom_seuil = get_nom_seuil(seuil_val)
                     ecart = round(last_price - seuil_val, 2)
-                    signal_type = f"🔺 Cassure {nom_seuil} +{ecart}$"
+                    signal_type = f"📈 Cassure {get_nom_seuil(seuil_val)} -{ecart}$"
                     seuil_casse = seuil_val
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
-                    nom_seuil = get_nom_seuil(seuil_val)
                     ecart = round(seuil_val - last_price, 2)
-                    signal_type = f"🔻 Cassure {nom_seuil} -{ecart}$"
+                    signal_type = f"📉 Cassure {get_nom_seuil(seuil_val)} +{ecart}$"
                     seuil_casse = seuil_val
                     break
 
@@ -135,10 +141,10 @@ async def fetch_gold_data():
 
                 if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
-                    signal_type = f"🚧🔺 -{ecart}$ du R1"
+                    signal_type = f"🚧📈 -{ecart}$ du R1"
                 elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
-                    signal_type = f"🚧🔻 +{ecart}$ du S1"
+                    signal_type = f"🚧📉 +{ecart}$ du S1"
 
             if not signal_type:
                 print("❌ Aucun signal détecté (zone neutre)", flush=True)
@@ -155,8 +161,8 @@ async def fetch_gold_data():
             }
 
             if seuil_casse:
-                props["SL"] = {"number": round(seuil_casse - 1, 2) if "🔺" in signal_type else round(seuil_casse + 1, 2)}
-                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "🔺" in signal_type else round(last_price - 5, 2)}
+                props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
+                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
 
             notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
             print("✅ Signal ajouté à Notion", flush=True)
