@@ -3,3 +3,5 @@ notion-client==2.3.0
 beautifulsoup4==4.12.3
 pandas==2.2.2
 numpy==1.26.4
+requests
+python-dotenv
