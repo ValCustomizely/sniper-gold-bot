@@ -15,7 +15,12 @@ DERNIERE_MAJ_HORAIRES = set()
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
     try:
-        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID).get("results", [])
+        today = datetime.utcnow().date().isoformat()
+        pages = notion.databases.query(
+            database_id=SEUILS_DATABASE_ID,
+            filter={"property": "Date", "date": {"equals": today}}
+        ).get("results", [])
+
         SEUILS_MANUELS = []
         noms = ["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"]
         for idx, page in enumerate(sorted(pages, key=lambda p: p["properties"].get("Valeur", {}).get("number", 0))):
@@ -180,3 +185,16 @@ if __name__ == "__main__":
         asyncio.run(main_loop())
     except Exception as e:
         print(f"❌ Erreur critique dans le bot principal : {e}", flush=True)
+
+
+✅ Code main.py mis à jour avec :
+
+Signal sous forme : 📈 Cassure R1 +1.27$ ou 📉 Cassure S1 -0.88$
+
+Plus de référence à des noms génériques comme "Seuil8"
+
+Chargement filtré par date pour éviter conflit avec les anciens seuils
+
+
+Tu peux tester immédiatement. Dis-moi si tu veux ajouter un test manuel.
+
