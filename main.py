@@ -185,16 +185,3 @@ if __name__ == "__main__":
         asyncio.run(main_loop())
     except Exception as e:
         print(f"❌ Erreur critique dans le bot principal : {e}", flush=True)
-
-
-✅ Code main.py mis à jour avec :
-
-Signal sous forme : 📈 Cassure R1 +1.27$ ou 📉 Cassure S1 -0.88$
-
-Plus de référence à des noms génériques comme "Seuil8"
-
-Chargement filtré par date pour éviter conflit avec les anciens seuils
-
-
-Tu peux tester immédiatement. Dis-moi si tu veux ajouter un test manuel.
-
