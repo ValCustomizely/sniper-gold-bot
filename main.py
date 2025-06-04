@@ -23,7 +23,7 @@ async def charger_seuils_depuis_notion():
             type_ = props.get("Type", {}).get("select", {}).get("name")
             if valeur is not None and type_ in {"support", "résistance", "pivot"}:
                 SEUILS_MANUELS.append({"valeur": valeur, "type": type_})
-        print(f"🗕️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
+        print(f"🗅️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
 
@@ -114,12 +114,17 @@ async def fetch_gold_data():
             for seuil in SEUILS_MANUELS:
                 seuil_val = seuil["valeur"]
                 seuil_type = seuil["type"]
+                nom_seuil = None
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
-                    signal_type = f"📈 Cassure {seuil_val}$"
+                    nom_seuil = get_nom_seuil(seuil_val)
+                    ecart = round(last_price - seuil_val, 2)
+                    signal_type = f"🔺 Cassure {nom_seuil} +{ecart}$"
                     seuil_casse = seuil_val
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
-                    signal_type = f"📉 Cassure {seuil_val}$"
+                    nom_seuil = get_nom_seuil(seuil_val)
+                    ecart = round(seuil_val - last_price, 2)
+                    signal_type = f"🔻 Cassure {nom_seuil} -{ecart}$"
                     seuil_casse = seuil_val
                     break
 
@@ -130,10 +135,10 @@ async def fetch_gold_data():
 
                 if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
-                    signal_type = f"🚧📈 -{ecart}$ du R1"
+                    signal_type = f"🚧🔺 -{ecart}$ du R1"
                 elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
-                    signal_type = f"🚧📉 +{ecart}$ du S1"
+                    signal_type = f"🚧🔻 +{ecart}$ du S1"
 
             if not signal_type:
                 print("❌ Aucun signal détecté (zone neutre)", flush=True)
@@ -150,8 +155,8 @@ async def fetch_gold_data():
             }
 
             if seuil_casse:
-                props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
-                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
+                props["SL"] = {"number": round(seuil_casse - 1, 2) if "🔺" in signal_type else round(seuil_casse + 1, 2)}
+                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "🔺" in signal_type else round(last_price - 5, 2)}
 
             notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
             print("✅ Signal ajouté à Notion", flush=True)
