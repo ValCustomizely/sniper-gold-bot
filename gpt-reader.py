@@ -25,19 +25,18 @@ def fetch_notion_data():
     for row in data["results"]:
         props = row["properties"]
         try:
-            heure = props["Heure"]["rich_text"][0]["text"]["content"]
+            horodatage = props["Horodatage"]["rich_text"][0]["text"]["content"]
             prix = props["Prix"]["number"]
-            volume = props["Volume"]["number"]
-            rsi = props.get("RSI", {}).get("number")
-            macd = props.get("MACD", {}).get("rich_text", [{}])[0].get("text", {}).get("content")
-            signal = props.get("Signal sniper", {}).get("select", {}).get("name")
+            signal = props["Signal"]["select"]["name"]
+            sl = props.get("SL", {}).get("number")
+            sl_suiveur = props.get("SL suiveur", {}).get("number")
+
             results.append({
-                "heure": heure,
+                "horodatage": horodatage,
                 "prix": prix,
-                "volume": volume,
-                "rsi": rsi,
-                "macd": macd,
-                "signal": signal
+                "signal": signal,
+                "sl": sl,
+                "sl_suiveur": sl_suiveur
             })
         except Exception as e:
             print(f"[ERREUR] Parsing d'une ligne : {e}")
