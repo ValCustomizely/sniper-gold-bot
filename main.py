@@ -17,7 +17,12 @@ COMPTEUR_APRES_CASSURE = 0
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
     try:
-        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID).get("results", [])
+        today = datetime.utcnow().date().isoformat()
+        pages = notion.databases.query(
+            database_id=SEUILS_DATABASE_ID,
+            filter={"property": "Date", "date": {"equals": today}}
+        ).get("results", [])
+
         SEUILS_MANUELS = []
         noms = ["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"]
         for idx, page in enumerate(sorted(pages, key=lambda p: p["properties"].get("Valeur", {}).get("number", 0))):
