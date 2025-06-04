@@ -123,14 +123,15 @@ async def fetch_gold_data():
             for seuil in SEUILS_MANUELS:
                 seuil_val = seuil["valeur"]
                 seuil_type = seuil["type"]
+                nom_seuil = get_nom_seuil(seuil_val)
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
                     ecart = round(last_price - seuil_val, 2)
-                    signal_type = f"📈 Cassure {get_nom_seuil(seuil_val)} +{ecart}$"
+                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
                     seuil_casse = seuil_val
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     ecart = round(seuil_val - last_price, 2)
-                    signal_type = f"📉 Cassure {get_nom_seuil(seuil_val)} -{ecart}$"
+                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
                     seuil_casse = seuil_val
                     break
 
