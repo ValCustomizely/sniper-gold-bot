@@ -17,16 +17,26 @@ COMPTEUR_APRES_CASSURE = 0
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
     try:
-        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID).get("results", [])
+        today = datetime.utcnow().date().isoformat()
+        pages = notion.databases.query(
+            database_id=SEUILS_DATABASE_ID,
+            filter={"property": "Date", "date": {"equals": today}}
+        ).get("results", [])
+
         SEUILS_MANUELS = []
         noms = ["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"]
-        for idx, page in enumerate(sorted(pages, key=lambda p: p["properties"].get("Valeur", {}).get("number", 0))):
+        seuils_valides = [
+            page for page in sorted(pages, key=lambda p: p["properties"].get("Valeur", {}).get("number", 0))
+            if page["properties"].get("Type", {}).get("select", {}).get("name") in {"support", "résistance", "pivot"}
+        ][:7]  # Limiter à 7 seuils
+
+        for idx, page in enumerate(seuils_valides):
             props = page["properties"]
             valeur = props.get("Valeur", {}).get("number")
             type_ = props.get("Type", {}).get("select", {}).get("name")
-            if valeur is not None and type_ in {"support", "résistance", "pivot"}:
-                nom = noms[idx] if idx < len(noms) else f"Seuil{idx}"
-                SEUILS_MANUELS.append({"valeur": valeur, "type": type_, "nom": nom})
+            nom = noms[idx]
+            SEUILS_MANUELS.append({"valeur": valeur, "type": type_, "nom": nom})
+
         print(f"🗕️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
@@ -146,8 +156,10 @@ async def fetch_gold_data():
                 elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
                     signal_type = f"🚧📉 +{ecart}$ du S1"
-                else:
-                    signal_type = f"🚧 Hors zone pivot"
+
+            if not signal_type:
+                print("❌ Aucun signal détecté (zone neutre)", flush=True)
+                return
 
             if seuil_casse:
                 if nom_seuil_casse != DERNIER_SEUIL_CASSE:
