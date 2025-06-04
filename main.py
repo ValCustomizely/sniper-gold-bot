@@ -12,17 +12,13 @@ SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 SEUILS_MANUELS = []
 DERNIERE_MAJ_HORAIRES = set()
 DERNIER_SEUIL_CASSE = None
+DIRECTION_CASSURE = None
 COMPTEUR_APRES_CASSURE = 0
 
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
     try:
-        today = datetime.utcnow().date().isoformat()
-        pages = notion.databases.query(
-            database_id=SEUILS_DATABASE_ID,
-            filter={"property": "Date", "date": {"equals": today}}
-        ).get("results", [])
-
+        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID).get("results", [])
         SEUILS_MANUELS = []
         noms = ["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"]
         for idx, page in enumerate(sorted(pages, key=lambda p: p["properties"].get("Valeur", {}).get("number", 0))):
@@ -86,7 +82,7 @@ async def mettre_a_jour_seuils_auto():
         print(f"❌ Erreur mise à jour seuils auto : {e}", flush=True)
 
 async def fetch_gold_data():
-    global DERNIER_SEUIL_CASSE, COMPTEUR_APRES_CASSURE
+    global DERNIER_SEUIL_CASSE, COMPTEUR_APRES_CASSURE, DIRECTION_CASSURE
 
     now = datetime.utcnow()
     print(f"[fetch_gold_data] ⏳ Début de la récupération à {now.isoformat()}", flush=True)
@@ -122,6 +118,7 @@ async def fetch_gold_data():
             signal_type = None
             seuil_casse = None
             nom_seuil_casse = None
+            direction = None
 
             for seuil in SEUILS_MANUELS:
                 seuil_val = seuil["valeur"]
@@ -131,13 +128,15 @@ async def fetch_gold_data():
                     ecart = round(last_price - seuil_val, 2)
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
-                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
+                    direction = "📈"
+                    signal_type = f"{direction} Cassure {nom_seuil} +{ecart}$"
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     ecart = round(seuil_val - last_price, 2)
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
-                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
+                    direction = "📉"
+                    signal_type = f"{direction} Cassure {nom_seuil} -{ecart}$"
                     break
 
             if signal_type is None:
@@ -147,18 +146,25 @@ async def fetch_gold_data():
 
                 if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
-                    signal_type = f"🚧📈 -{ecart}$ du R1"
+                    signal_type = f"🚧📈 +{ecart}$ du R1"
+                    DERNIER_SEUIL_CASSE = None
+                    COMPTEUR_APRES_CASSURE = 0
+                    DIRECTION_CASSURE = None
                 elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
-                    signal_type = f"🚧📉 +{ecart}$ du S1"
+                    signal_type = f"🚧📉 -{ecart}$ du S1"
+                    DERNIER_SEUIL_CASSE = None
+                    COMPTEUR_APRES_CASSURE = 0
+                    DIRECTION_CASSURE = None
 
             if not signal_type:
                 print("❌ Aucun signal détecté (zone neutre)", flush=True)
                 return
 
             if seuil_casse:
-                if nom_seuil_casse != DERNIER_SEUIL_CASSE:
+                if nom_seuil_casse != DERNIER_SEUIL_CASSE or direction != DIRECTION_CASSURE:
                     DERNIER_SEUIL_CASSE = nom_seuil_casse
+                    DIRECTION_CASSURE = direction
                     COMPTEUR_APRES_CASSURE = 1
                 else:
                     COMPTEUR_APRES_CASSURE += 1
@@ -176,8 +182,8 @@ async def fetch_gold_data():
             }
 
             if seuil_casse:
-                props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
-                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
+                props["SL"] = {"number": round(seuil_casse - 1, 2) if direction == "📈" else round(seuil_casse + 1, 2)}
+                props["SL suiveur"] = {"number": round(last_price + 5, 2) if direction == "📈" else round(last_price - 5, 2)}
 
             notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
             print("✅ Signal ajouté à Notion", flush=True)
