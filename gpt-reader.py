@@ -24,6 +24,8 @@ def fetch_notion_data():
     results = []
     for row in data["results"]:
         props = row["properties"]
+        print(f"[DEBUG] Champs disponibles : {list(props.keys())}")
+        props = row["properties"]
         try:
             horodatage = props["Horodatage"]["date"]["start"]
             prix = props["Prix"]["number"]
