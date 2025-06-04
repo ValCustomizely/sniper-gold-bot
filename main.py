@@ -17,12 +17,14 @@ async def charger_seuils_depuis_notion():
     try:
         pages = notion.databases.query(database_id=SEUILS_DATABASE_ID).get("results", [])
         SEUILS_MANUELS = []
-        for page in pages:
+        noms = ["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"]
+        for idx, page in enumerate(sorted(pages, key=lambda p: p["properties"].get("Valeur", {}).get("number", 0))):
             props = page["properties"]
             valeur = props.get("Valeur", {}).get("number")
             type_ = props.get("Type", {}).get("select", {}).get("name")
             if valeur is not None and type_ in {"support", "résistance", "pivot"}:
-                SEUILS_MANUELS.append({"valeur": valeur, "type": type_})
+                nom = noms[idx] if idx < len(noms) else f"Seuil{idx}"
+                SEUILS_MANUELS.append({"valeur": valeur, "type": type_, "nom": nom})
         print(f"🗕️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
@@ -30,15 +32,6 @@ async def charger_seuils_depuis_notion():
 def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
     return now.hour == 4 and f"{now.date().isoformat()}_4" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_4")
-
-def get_nom_seuil(valeur):
-    seuils_tries = sorted(SEUILS_MANUELS, key=lambda x: abs(x["valeur"] - valeur))
-    if seuils_tries:
-        plus_proche = seuils_tries[0]["valeur"]
-        for nom, seuil in zip(["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"], sorted([s["valeur"] for s in SEUILS_MANUELS])):
-            if abs(valeur - seuil) < 0.1:
-                return nom
-    return f"{valeur:.2f}"
 
 async def mettre_a_jour_seuils_auto():
     today = datetime.utcnow().date().isoformat()
@@ -123,7 +116,7 @@ async def fetch_gold_data():
             for seuil in SEUILS_MANUELS:
                 seuil_val = seuil["valeur"]
                 seuil_type = seuil["type"]
-                nom_seuil = get_nom_seuil(seuil_val)
+                nom_seuil = seuil["nom"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
                     ecart = round(last_price - seuil_val, 2)
                     signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
@@ -137,15 +130,15 @@ async def fetch_gold_data():
 
             if signal_type is None:
                 pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["type"] == "pivot"), None)
-                r1 = sorted([s["valeur"] for s in SEUILS_MANUELS if s["type"] == "résistance"])[0] if any(s["type"] == "résistance" for s in SEUILS_MANUELS) else None
-                s1 = sorted([s["valeur"] for s in SEUILS_MANUELS if s["type"] == "support"])[-1] if any(s["type"] == "support" for s in SEUILS_MANUELS) else None
+                r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
+                s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
 
                 if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
-                    signal_type = f"🚧📈 +{ecart}$ du R1"
+                    signal_type = f"🚧📈 -{ecart}$ du R1"
                 elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
-                    signal_type = f"🚧📉 -{ecart}$ du S1"
+                    signal_type = f"🚧📉 +{ecart}$ du S1"
 
             if not signal_type:
                 print("❌ Aucun signal détecté (zone neutre)", flush=True)
