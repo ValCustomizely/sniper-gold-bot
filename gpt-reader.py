@@ -27,7 +27,7 @@ def fetch_notion_data():
         try:
             horodatage = props["Horodatage"]["rich_text"][0]["text"]["content"]
             prix = props["Prix"]["number"]
-            signal = props["Signal"]["select"]["name"]
+            signal = props["Signal"]["text"]["name"]
             sl = props.get("SL", {}).get("number")
             sl_suiveur = props.get("SL suiveur", {}).get("number")
 
