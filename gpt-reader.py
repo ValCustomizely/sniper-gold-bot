@@ -25,9 +25,9 @@ def fetch_notion_data():
     for row in data["results"]:
         props = row["properties"]
         try:
-            horodatage = props["Horodatage"]["rich_text"][0]["text"]["content"]
+            horodatage = props["Horodatage"]["date"]["start"]
             prix = props["Prix"]["number"]
-            signal = props["Signal"]["text"]["name"]
+            signal = props["Signal"]["title"][0]["text"]["content"]
             sl = props.get("SL", {}).get("number")
             sl_suiveur = props.get("SL suiveur", {}).get("number")
 
