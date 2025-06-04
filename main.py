@@ -25,18 +25,14 @@ async def charger_seuils_depuis_notion():
 
         SEUILS_MANUELS = []
         noms = ["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"]
-        seuils_valides = [
-            page for page in sorted(pages, key=lambda p: p["properties"].get("Valeur", {}).get("number", 0))
-            if page["properties"].get("Type", {}).get("select", {}).get("name") in {"support", "résistance", "pivot"}
-        ][:7]  # Limiter à 7 seuils
-
-        for idx, page in enumerate(seuils_valides):
+        for idx, page in enumerate(sorted(pages, key=lambda p: p["properties"].get("Valeur", {}).get("number", 0))):
             props = page["properties"]
             valeur = props.get("Valeur", {}).get("number")
             type_ = props.get("Type", {}).get("select", {}).get("name")
-            nom = noms[idx]
-            SEUILS_MANUELS.append({"valeur": valeur, "type": type_, "nom": nom})
-
+            if valeur is not None and type_ in {"support", "résistance", "pivot"}:
+                nom = noms[idx] if idx < len(noms) else None
+                if nom:
+                    SEUILS_MANUELS.append({"valeur": valeur, "type": type_, "nom": nom})
         print(f"🗕️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
@@ -139,10 +135,10 @@ async def fetch_gold_data():
                     signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
-                    ecart = round(seuil_val - last_price, 2)
+                    ecart = round(last_price - seuil_val, 2)
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
-                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
+                    signal_type = f"📉 Cassure {nom_seuil} {ecart:+.2f}$"
                     break
 
             if signal_type is None:
@@ -152,10 +148,10 @@ async def fetch_gold_data():
 
                 if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
-                    signal_type = f"🚧📈 -{ecart}$ du R1"
+                    signal_type = f"🚧📈 +{ecart}$ du R1"
                 elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
-                    signal_type = f"🚧📉 +{ecart}$ du S1"
+                    signal_type = f"🚧📉 -{ecart}$ du S1"
 
             if not signal_type:
                 print("❌ Aucun signal détecté (zone neutre)", flush=True)
@@ -167,7 +163,8 @@ async def fetch_gold_data():
                     COMPTEUR_APRES_CASSURE = 1
                 else:
                     COMPTEUR_APRES_CASSURE += 1
-                if COMPTEUR_APRES_CASSURE == 5:
+
+                if COMPTEUR_APRES_CASSURE >= 5:
                     signal_type += " 🚧"
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
