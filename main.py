@@ -17,39 +17,16 @@ COMPTEUR_APRES_CASSURE = 0
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
     try:
-        today = datetime.utcnow().date().isoformat()
-        pages = notion.databases.query(
-            database_id=SEUILS_DATABASE_ID,
-            filter={"property": "Date", "date": {"equals": today}}
-        ).get("results", [])
-
+        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID).get("results", [])
         SEUILS_MANUELS = []
-        pivots = []
-        resistances = []
-        supports = []
-
-        for page in pages:
+        noms = ["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"]
+        for idx, page in enumerate(sorted(pages, key=lambda p: p["properties"].get("Valeur", {}).get("number", 0))):
             props = page["properties"]
             valeur = props.get("Valeur", {}).get("number")
             type_ = props.get("Type", {}).get("select", {}).get("name")
-            if valeur is not None and type_:
-                if type_ == "pivot":
-                    pivots.append((valeur, "Pivot"))
-                elif type_ == "résistance":
-                    resistances.append(valeur)
-                elif type_ == "support":
-                    supports.append(valeur)
-
-        resistances = sorted(resistances)
-        supports = sorted(supports, reverse=True)
-
-        for i, val in enumerate(resistances):
-            SEUILS_MANUELS.append({"valeur": val, "type": "résistance", "nom": f"R{i+1}"})
-        for i, val in enumerate(supports):
-            SEUILS_MANUELS.append({"valeur": val, "type": "support", "nom": f"S{i+1}"})
-        for val, nom in pivots:
-            SEUILS_MANUELS.append({"valeur": val, "type": "pivot", "nom": nom})
-
+            if valeur is not None and type_ in {"support", "résistance", "pivot"}:
+                nom = noms[idx] if idx < len(noms) else f"Seuil{idx}"
+                SEUILS_MANUELS.append({"valeur": valeur, "type": type_, "nom": nom})
         print(f"🗕️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
@@ -152,10 +129,10 @@ async def fetch_gold_data():
                     signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
-                    ecart = round(last_price - seuil_val, 2)
+                    ecart = round(seuil_val - last_price, 2)
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
-                    signal_type = f"📉 Cassure {nom_seuil} +{abs(ecart)}$"
+                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
                     break
 
             if signal_type is None:
@@ -165,14 +142,12 @@ async def fetch_gold_data():
 
                 if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
-                    signal_type = f"🚧📈 +{ecart}$ du R1"
+                    signal_type = f"🚧📈 -{ecart}$ du R1"
                 elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
-                    signal_type = f"🚧📉 -{ecart}$ du S1"
-
-            if not signal_type:
-                print("❌ Aucun signal détecté (zone neutre)", flush=True)
-                return
+                    signal_type = f"🚧📉 +{ecart}$ du S1"
+                else:
+                    signal_type = f"🚧 Hors zone pivot"
 
             if seuil_casse:
                 if nom_seuil_casse != DERNIER_SEUIL_CASSE:
