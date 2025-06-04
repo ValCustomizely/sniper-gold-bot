@@ -11,16 +11,13 @@ SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 
 SEUILS_MANUELS = []
 DERNIERE_MAJ_HORAIRES = set()
+DERNIER_SEUIL_CASSE = None
+COMPTEUR_APRES_CASSURE = 0
 
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
     try:
-        today = datetime.utcnow().date().isoformat()
-        pages = notion.databases.query(
-            database_id=SEUILS_DATABASE_ID,
-            filter={"property": "Date", "date": {"equals": today}}
-        ).get("results", [])
-
+        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID).get("results", [])
         SEUILS_MANUELS = []
         noms = ["Pivot", "R1", "R2", "R3", "S1", "S2", "S3"]
         for idx, page in enumerate(sorted(pages, key=lambda p: p["properties"].get("Valeur", {}).get("number", 0))):
@@ -84,6 +81,8 @@ async def mettre_a_jour_seuils_auto():
         print(f"❌ Erreur mise à jour seuils auto : {e}", flush=True)
 
 async def fetch_gold_data():
+    global DERNIER_SEUIL_CASSE, COMPTEUR_APRES_CASSURE
+
     now = datetime.utcnow()
     print(f"[fetch_gold_data] ⏳ Début de la récupération à {now.isoformat()}", flush=True)
 
@@ -117,6 +116,7 @@ async def fetch_gold_data():
 
             signal_type = None
             seuil_casse = None
+            nom_seuil_casse = None
 
             for seuil in SEUILS_MANUELS:
                 seuil_val = seuil["valeur"]
@@ -124,13 +124,15 @@ async def fetch_gold_data():
                 nom_seuil = seuil["nom"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
                     ecart = round(last_price - seuil_val, 2)
-                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
                     seuil_casse = seuil_val
+                    nom_seuil_casse = nom_seuil
+                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     ecart = round(seuil_val - last_price, 2)
-                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
                     seuil_casse = seuil_val
+                    nom_seuil_casse = nom_seuil
+                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
                     break
 
             if signal_type is None:
@@ -148,6 +150,15 @@ async def fetch_gold_data():
             if not signal_type:
                 print("❌ Aucun signal détecté (zone neutre)", flush=True)
                 return
+
+            if seuil_casse:
+                if nom_seuil_casse != DERNIER_SEUIL_CASSE:
+                    DERNIER_SEUIL_CASSE = nom_seuil_casse
+                    COMPTEUR_APRES_CASSURE = 1
+                else:
+                    COMPTEUR_APRES_CASSURE += 1
+                if COMPTEUR_APRES_CASSURE == 5:
+                    signal_type += " 🚧"
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
