@@ -17,7 +17,7 @@ HEADERS = {
 def fetch_notion_data():
     response = requests.post(NOTION_API_URL, headers=HEADERS)
     if response.status_code != 200:
-        print(f"Erreur lors de la récupération des données Notion : {response.status_code}")
+        print(f"[ERREUR] Récupération Notion : {response.status_code} {response.text}")
         return None
 
     data = response.json()
@@ -40,20 +40,20 @@ def fetch_notion_data():
                 "signal": signal
             })
         except Exception as e:
-            print(f"Erreur de parsing : {e}")
+            print(f"[ERREUR] Parsing d'une ligne : {e}")
             continue
 
     return results
 
 def main():
-    print("Lecture de la base Notion en cours...")
+    print(f"[INFO] Lecture Notion à {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}...")
     donnees = fetch_notion_data()
     if donnees:
-        print(f"{len(donnees)} lignes récupérées.")
-        for d in donnees[:5]:
+        print(f"[OK] {len(donnees)} lignes récupérées. Exemple :")
+        for d in donnees[:3]:
             print(d)
     else:
-        print("Aucune donnée récupérée.")
+        print("[WARN] Aucune donnée récupérée.")
 
 if __name__ == "__main__":
     main()
