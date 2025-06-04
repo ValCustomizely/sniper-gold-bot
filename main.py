@@ -142,10 +142,10 @@ async def fetch_gold_data():
 
                 if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
-                    signal_type = f"🚧📈 -{ecart}$ du R1"
+                    signal_type = f"🚧📈 +{ecart}$ du R1"
                 elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
-                    signal_type = f"🚧📉 +{ecart}$ du S1"
+                    signal_type = f"🚧📉 -{ecart}$ du S1"
 
             if not signal_type:
                 print("❌ Aucun signal détecté (zone neutre)", flush=True)
