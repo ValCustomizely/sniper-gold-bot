@@ -129,20 +129,28 @@ async def fetch_gold_data():
                 nom_seuil = seuil["nom"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
                     ecart = round(last_price - seuil_val, 2)
+                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
-                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     ecart = round(seuil_val - last_price, 2)
+                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
-                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
                     break
 
             if signal_type is None:
-                print("⛔ Zone hors seuil sans cassure — aucun signal généré", flush=True)
-                return
+                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
+                r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
+                s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
+
+                if pivot and r1 and pivot < last_price < r1:
+                    ecart = round(r1 - last_price, 2)
+                    signal_type = f"🚧📈 -{ecart}$ du R1"
+                elif pivot and s1 and s1 < last_price < pivot:
+                    ecart = round(last_price - s1, 2)
+                    signal_type = f"🚧📉 +{ecart}$ du S1"
 
             if seuil_casse:
                 if nom_seuil_casse != DERNIER_SEUIL_CASSE:
@@ -150,8 +158,8 @@ async def fetch_gold_data():
                     COMPTEUR_APRES_CASSURE = 1
                 else:
                     COMPTEUR_APRES_CASSURE += 1
-                    if COMPTEUR_APRES_CASSURE >= 5:
-                        signal_type += " 🚧"
+                if COMPTEUR_APRES_CASSURE >= 5:
+                    signal_type += " 🚧"
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
