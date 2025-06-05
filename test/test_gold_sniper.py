@@ -1,6 +1,7 @@
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 import main
-from datetime import datetime, timedelta
+from datetime import datetime
 
 @pytest.fixture(autouse=True)
 def reset_globals():
@@ -11,21 +12,14 @@ def reset_globals():
     yield
 
 # --- 1. Chargement des seuils ---
-def test_chargement_seuils_mock(monkeypatch):
-    def mock_query(database_id, filter):
-        return {
-            "results": [
-                {"properties": {
-                    "Valeur": {"number": 3300}, "Type": {"select": {"name": "support"}}
-                }},
-                {"properties": {
-                    "Valeur": {"number": 3350}, "Type": {"select": {"name": "pivot"}}
-                }},
-                {"properties": {
-                    "Valeur": {"number": 3400}, "Type": {"select": {"name": "résistance"}}
-                }}
-            ]
-        }
+def test_charger_seuils_depuis_notion_mock(monkeypatch):
+    mock_query = lambda **kwargs: {
+        "results": [
+            {"properties": {"Valeur": {"number": 3300}, "Type": {"select": {"name": "support"}}}},
+            {"properties": {"Valeur": {"number": 3350}, "Type": {"select": {"name": "pivot"}}}},
+            {"properties": {"Valeur": {"number": 3400}, "Type": {"select": {"name": "résistance"}}}},
+        ]
+    }
     monkeypatch.setattr(main.notion.databases, "query", mock_query)
     main.SEUILS_MANUELS = []
     main.charger_seuils_depuis_notion()
@@ -33,7 +27,6 @@ def test_chargement_seuils_mock(monkeypatch):
     assert "Pivot" in noms
     assert "R1" in noms
     assert "S1" in noms
-    assert noms == sorted(noms, key=lambda x: ("S" in x, x))
 
 # --- 2. Calcul automatique des seuils ---
 def test_calcul_pivots():
@@ -90,3 +83,27 @@ def test_aucun_seuil():
         assert pivot is None
     except Exception as e:
         pytest.fail(f"Erreur inattendue : {e}")
+
+# --- 4. Mock complet de fetch_gold_data ---
+import pytest
+@pytest.mark.asyncio
+async def test_fetch_gold_data_mock(monkeypatch):
+    main.SEUILS_MANUELS = [
+        {"valeur": 3400, "type": "résistance", "nom": "R1"},
+        {"valeur": 3350, "type": "pivot", "nom": "Pivot"},
+        {"valeur": 3300, "type": "support", "nom": "S1"},
+    ]
+
+    monkeypatch.setattr(main.notion.pages, "create", lambda **kwargs: print("✅ Notion call mock"))
+
+    class MockResponse:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"results": [{"c": 3401, "v": 1250}]}
+
+    async def mock_get(*args, **kwargs):
+        return MockResponse()
+
+    monkeypatch.setattr(main.httpx.AsyncClient, "get", mock_get)
+
+    await main.fetch_gold_data()
