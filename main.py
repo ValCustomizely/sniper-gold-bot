@@ -11,6 +11,8 @@ SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 
 SEUILS_MANUELS = []
 DERNIERE_MAJ_HORAIRES = set()
+DERNIER_SEUIL_CASSE = None
+DERNIER_TYPE_SIGNAL = None
 
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
@@ -84,6 +86,8 @@ async def mettre_a_jour_seuils_auto():
         print(f"❌ Erreur mise à jour seuils auto : {e}", flush=True)
 
 async def fetch_gold_data():
+    global DERNIER_SEUIL_CASSE, DERNIER_TYPE_SIGNAL
+
     now = datetime.utcnow()
     print(f"[fetch_gold_data] ⏳ Début de la récupération à {now.isoformat()}", flush=True)
 
@@ -117,23 +121,26 @@ async def fetch_gold_data():
 
             signal_type = None
             seuil_casse = None
+            nom_seuil = None
 
             for seuil in SEUILS_MANUELS:
                 seuil_val = seuil["valeur"]
                 seuil_type = seuil["type"]
-                nom_seuil = seuil["nom"]
+                nom = seuil["nom"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
                     ecart = round(last_price - seuil_val, 2)
-                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
+                    signal_type = f"📈 Cassure {nom} +{ecart}$"
                     seuil_casse = seuil_val
+                    nom_seuil = nom
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     ecart = round(seuil_val - last_price, 2)
-                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
+                    signal_type = f"📉 Cassure {nom} -{ecart}$"
                     seuil_casse = seuil_val
+                    nom_seuil = nom
                     break
 
-            if signal_type is None:
+            if not signal_type:
                 pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["type"] == "pivot"), None)
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
@@ -146,8 +153,12 @@ async def fetch_gold_data():
                     signal_type = f"🚧📉 -{ecart}$ du S1"
 
             if not signal_type:
-                print("❌ Aucun signal détecté (zone neutre)", flush=True)
-                return
+                return  # Ignore tick, ne rien loguer
+
+            if signal_type == DERNIER_TYPE_SIGNAL and seuil_casse is not None:
+                signal_type += " 🚧"
+            else:
+                DERNIER_TYPE_SIGNAL = signal_type
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
