@@ -11,10 +11,7 @@ SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 
 SEUILS_MANUELS = []
 DERNIERE_MAJ_HORAIRES = set()
-
-def est_heure_de_mise_a_jour_solide():
-    now = datetime.utcnow()
-    return now.hour == 4 and f"{now.date().isoformat()}_4" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_4")
+DERNIER_SIGNAL = {"zone": None, "compteur": 0}
 
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
@@ -37,6 +34,55 @@ async def charger_seuils_depuis_notion():
         print(f"🗕️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
+
+def est_heure_de_mise_a_jour_solide():
+    now = datetime.utcnow()
+    return now.hour == 4 and f"{now.date().isoformat()}_4" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_4")
+
+async def mettre_a_jour_seuils_auto():
+    today = datetime.utcnow().date().isoformat()
+    url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{today}/{today}"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(url, params={"adjusted": "true", "apiKey": POLYGON_API_KEY})
+            r.raise_for_status()
+            result = r.json().get("results", [])[0]
+            high = result["h"]
+            low = result["l"]
+            close = result["c"]
+            pivot = round((high + low + close) / 3, 2)
+            r1 = round((2 * pivot) - low, 2)
+            r2 = round(pivot + (high - low), 2)
+            r3 = round(high + 2 * (pivot - low), 2)
+            s1 = round((2 * pivot) - high, 2)
+            s2 = round(pivot - (high - low), 2)
+            s3 = round(low - 2 * (high - pivot), 2)
+
+            seuils = [
+                ("pivot", pivot), ("résistance", r1), ("résistance", r2), ("résistance", r3),
+                ("support", s1), ("support", s2), ("support", s3)
+            ]
+
+            try:
+                old_pages = notion.databases.query(
+                    database_id=SEUILS_DATABASE_ID,
+                    filter={"property": "Date", "date": {"equals": today}}
+                ).get("results", [])
+                for page in old_pages:
+                    notion.pages.update(page_id=page["id"], archived=True)
+                print(f"🗑️ Anciennes valeurs supprimées ({len(old_pages)})", flush=True)
+            except Exception as e:
+                print(f"❌ Erreur suppression anciennes valeurs : {e}", flush=True)
+
+            for (type_, valeur) in seuils:
+                notion.pages.create(parent={"database_id": SEUILS_DATABASE_ID}, properties={
+                    "Type": {"select": {"name": type_}},
+                    "Valeur": {"number": valeur},
+                    "Date": {"date": {"start": today}}
+                })
+            print("✅ Seuils journaliers mis à jour dans Notion", flush=True)
+    except Exception as e:
+        print(f"❌ Erreur mise à jour seuils auto : {e}", flush=True)
 
 async def fetch_gold_data():
     now = datetime.utcnow()
@@ -89,19 +135,31 @@ async def fetch_gold_data():
                     break
 
             if not signal_type:
-                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["type"] == "pivot"), None)
+                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
-
-                if pivot and r1 and last_price >= pivot and last_price < r1:
+                if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
                     signal_type = f"🚧📈 +{ecart}$ du R1"
-                elif pivot and s1 and last_price <= pivot and last_price > s1:
+                elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
                     signal_type = f"🚧📉 -{ecart}$ du S1"
 
             if not signal_type:
                 print("⚠️ ERREUR : aucun signal défini (devrait être impossible)", flush=True)
+                return
+
+            zone_actuelle = signal_type.split(" ")[0] + signal_type.split(" ")[1]
+            if zone_actuelle == DERNIER_SIGNAL["zone"]:
+                DERNIER_SIGNAL["compteur"] += 1
+            else:
+                DERNIER_SIGNAL["zone"] = zone_actuelle
+                DERNIER_SIGNAL["compteur"] = 1
+
+            if DERNIER_SIGNAL["compteur"] == 5:
+                signal_type += " 🚧"
+            elif DERNIER_SIGNAL["compteur"] > 5:
+                print(f"🔇 Signal ignoré (déjà notifié 5 fois pour {zone_actuelle})", flush=True)
                 return
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
