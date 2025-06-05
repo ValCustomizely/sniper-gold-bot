@@ -11,8 +11,6 @@ SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 
 SEUILS_MANUELS = []
 DERNIERE_MAJ_HORAIRES = set()
-DERNIER_SEUIL_CASSE = None
-COMPTEUR_APRES_CASSURE = 0
 
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
@@ -86,8 +84,6 @@ async def mettre_a_jour_seuils_auto():
         print(f"❌ Erreur mise à jour seuils auto : {e}", flush=True)
 
 async def fetch_gold_data():
-    global DERNIER_SEUIL_CASSE, COMPTEUR_APRES_CASSURE
-
     now = datetime.utcnow()
     print(f"[fetch_gold_data] ⏳ Début de la récupération à {now.isoformat()}", flush=True)
 
@@ -121,7 +117,6 @@ async def fetch_gold_data():
 
             signal_type = None
             seuil_casse = None
-            nom_seuil_casse = None
 
             for seuil in SEUILS_MANUELS:
                 seuil_val = seuil["valeur"]
@@ -131,17 +126,15 @@ async def fetch_gold_data():
                     ecart = round(last_price - seuil_val, 2)
                     signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
                     seuil_casse = seuil_val
-                    nom_seuil_casse = nom_seuil
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     ecart = round(seuil_val - last_price, 2)
                     signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
                     seuil_casse = seuil_val
-                    nom_seuil_casse = nom_seuil
                     break
 
             if signal_type is None:
-                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
+                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["type"] == "pivot"), None)
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
 
@@ -153,17 +146,8 @@ async def fetch_gold_data():
                     signal_type = f"🚧📉 -{ecart}$ du S1"
 
             if not signal_type:
-                print("❌ Aucun signal détecté", flush=True)
+                print("❌ Aucun signal détecté (zone neutre)", flush=True)
                 return
-
-            if seuil_casse:
-                if nom_seuil_casse != DERNIER_SEUIL_CASSE:
-                    DERNIER_SEUIL_CASSE = nom_seuil_casse
-                    COMPTEUR_APRES_CASSURE = 1
-                else:
-                    COMPTEUR_APRES_CASSURE += 1
-                if COMPTEUR_APRES_CASSURE >= 5:
-                    signal_type += " 🚧"
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
