@@ -11,7 +11,6 @@ SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 
 SEUILS_MANUELS = []
 DERNIERE_MAJ_HORAIRES = set()
-DERNIER_SIGNAL = {"zone": None, "compteur": 0}
 
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
@@ -134,10 +133,11 @@ async def fetch_gold_data():
                     seuil_casse = seuil_val
                     break
 
-            if not signal_type:
-                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
+            if signal_type is None:
+                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["type"] == "pivot"), None)
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
+
                 if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
                     signal_type = f"🚧📈 +{ecart}$ du R1"
@@ -146,20 +146,7 @@ async def fetch_gold_data():
                     signal_type = f"🚧📉 -{ecart}$ du S1"
 
             if not signal_type:
-                print("⚠️ ERREUR : aucun signal défini (devrait être impossible)", flush=True)
-                return
-
-            zone_actuelle = signal_type.split(" ")[0] + signal_type.split(" ")[1]
-            if zone_actuelle == DERNIER_SIGNAL["zone"]:
-                DERNIER_SIGNAL["compteur"] += 1
-            else:
-                DERNIER_SIGNAL["zone"] = zone_actuelle
-                DERNIER_SIGNAL["compteur"] = 1
-
-            if DERNIER_SIGNAL["compteur"] == 5:
-                signal_type += " 🚧"
-            elif DERNIER_SIGNAL["compteur"] > 5:
-                print(f"🔇 Signal ignoré (déjà notifié 5 fois pour {zone_actuelle})", flush=True)
+                print("❌ Aucun signal détecté (zone neutre)", flush=True)
                 return
 
             print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
