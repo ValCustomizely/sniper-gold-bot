@@ -16,6 +16,7 @@ from datetime import datetime
 @pytest.fixture(autouse=True)
 def reset_globals():
     main.SEUILS_MANUELS = []
+    print("[DEBUG] Résultat query Notion :", main.notion.databases.query(filter={"property": "Date", "date": {"equals": today}}).get("results", []))
     main.DERNIERE_MAJ_HORAIRES.clear()
     main.DERNIER_SEUIL_CASSE = None
     main.COMPTEUR_APRES_CASSURE = 0
@@ -43,7 +44,7 @@ def test_charger_seuils_depuis_notion_mock(monkeypatch):
     main.SEUILS_MANUELS = []
     main.charger_seuils_depuis_notion()
     noms = [s["nom"] for s in main.SEUILS_MANUELS]
-    print("Seuils générés:", noms)
+    # print("Seuils générés:", noms)
     assert "Pivot" in noms
     assert any(nom.startswith("R") for nom in noms)
     assert any(nom.startswith("S") for nom in noms)
