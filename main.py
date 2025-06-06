@@ -112,10 +112,6 @@ async def charger_seuils_depuis_notion():
     except Exception as e:
         print(f"[ERREUR] chargement seuils : {e}", flush=True)
 
-def est_heure_de_mise_a_jour_solide():
-    now = datetime.utcnow()
-    return now.hour == 4 and f"{now.date().isoformat()}_4" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_4")
-
 async def fetch_gold_data():
     global DERNIER_SEUIL_CASSE, COMPTEUR_APRES_CASSURE
 
@@ -216,18 +212,21 @@ async def fetch_gold_data():
         except Exception as e:
             print(f"[ERREUR] attrapée dans fetch_gold_data : {e}", flush=True)
 
+def est_heure_de_mise_a_jour_1h():
+    now = datetime.utcnow()
+    return now.hour == 1 and f"{now.date().isoformat()}_1" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_1")
+
 async def main_loop():
     while True:
         now = datetime.utcnow()
         print(f"[TICK] Tick exécuté {now.isoformat()}", flush=True)
-        if est_heure_de_mise_a_jour_solide():
+        if est_heure_de_mise_a_jour_1h():
             await mettre_a_jour_seuils_auto()
         await fetch_gold_data()
         print("[PAUSE] Tick terminé, pause de 60s\n", flush=True)
         await asyncio.sleep(60)
 
 async def mise_en_route():
-    await mettre_a_jour_seuils_auto()  # Appel manuel temporaire
     await main_loop()
 
 if __name__ == "__main__":
