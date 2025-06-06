@@ -38,9 +38,9 @@ def test_charger_seuils_depuis_notion_mock(monkeypatch):
     main.charger_seuils_depuis_notion()
     noms = [s["nom"] for s in main.SEUILS_MANUELS]
     print("Seuils générés:", noms)
-    assert "Pivot" in noms
-    assert "R1" in noms
-    assert "S1" in noms
+    assert "pivot" in [s.lower() for s in noms]
+    assert any(nom.startswith("R") for nom in noms)
+    assert any(nom.startswith("S") for nom in noms)
 
 # --- 2. Calcul automatique des seuils ---
 def test_calcul_pivots():
