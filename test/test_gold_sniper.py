@@ -23,13 +23,17 @@ def reset_globals():
 
 # --- 1. Chargement des seuils ---
 def test_charger_seuils_depuis_notion_mock(monkeypatch):
-    monkeypatch.setattr(main.notion.databases, "query", lambda **kwargs: {
-        "results": [
-            {"properties": {"Valeur": {"number": 3300}, "Type": {"select": {"name": "support"}}}},
-            {"properties": {"Valeur": {"number": 3350}, "Type": {"select": {"name": "pivot"}}}},
-            {"properties": {"Valeur": {"number": 3400}, "Type": {"select": {"name": "résistance"}}}},
-        ]
-    })
+    class MockDatabases:
+        def query(self, **kwargs):
+            return {
+                "results": [
+                    {"properties": {"Valeur": {"number": 3300}, "Type": {"select": {"name": "support"}}}},
+                    {"properties": {"Valeur": {"number": 3350}, "Type": {"select": {"name": "pivot"}}}},
+                    {"properties": {"Valeur": {"number": 3400}, "Type": {"select": {"name": "résistance"}}}},
+                ]
+            }
+
+    monkeypatch.setattr(main.notion, "databases", MockDatabases())
     main.SEUILS_MANUELS = []
     main.charger_seuils_depuis_notion()
     noms = [s["nom"] for s in main.SEUILS_MANUELS]
