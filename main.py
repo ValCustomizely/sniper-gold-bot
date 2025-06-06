@@ -14,6 +14,67 @@ DERNIERE_MAJ_HORAIRES = set()
 DERNIER_SEUIL_CASSE = None
 COMPTEUR_APRES_CASSURE = 0
 
+async def mettre_a_jour_seuils_auto():
+    try:
+        print("[INFO] Mise à jour automatique des seuils (calcul depuis Polygon)", flush=True)
+
+        yesterday = (datetime.utcnow().date() - timedelta(days=1)).isoformat()
+        today = datetime.utcnow().date().isoformat()
+        url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{yesterday}/{yesterday}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params={
+                "adjusted": "true",
+                "sort": "desc",
+                "limit": 1,
+                "apiKey": POLYGON_API_KEY
+            }, timeout=10)
+
+            response.raise_for_status()
+            results = response.json().get("results", [])
+
+            if not results:
+                print("[WARN] Aucune donnée reçue de Polygon pour la veille", flush=True)
+                return
+
+            candle = results[0]
+            high = candle["h"]
+            low = candle["l"]
+            close = candle["c"]
+
+            pivot = round((high + low + close) / 3, 2)
+            r1 = round((2 * pivot) - low, 2)
+            s1 = round((2 * pivot) - high, 2)
+            r2 = round(pivot + (high - low), 2)
+            s2 = round(pivot - (high - low), 2)
+            r3 = round(high + 2 * (pivot - low), 2)
+            s3 = round(low - 2 * (high - pivot), 2)
+
+            seuils = [
+                {"valeur": r3, "type": "résistance"},
+                {"valeur": r2, "type": "résistance"},
+                {"valeur": r1, "type": "résistance"},
+                {"valeur": pivot, "type": "pivot"},
+                {"valeur": s1, "type": "support"},
+                {"valeur": s2, "type": "support"},
+                {"valeur": s3, "type": "support"},
+            ]
+
+            for seuil in seuils:
+                notion.pages.create(
+                    parent={"database_id": SEUILS_DATABASE_ID},
+                    properties={
+                        "Valeur": {"number": seuil["valeur"]},
+                        "Type": {"select": {"name": seuil["type"]}},
+                        "Date": {"date": {"start": today}}
+                    }
+                )
+
+            print(f"[INFO] 7 seuils enregistrés pour {today} (données du {yesterday})", flush=True)
+
+    except Exception as e:
+        print(f"[ERREUR] dans mettre_a_jour_seuils_auto : {e}", flush=True)
+
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
     try:
@@ -50,63 +111,6 @@ async def charger_seuils_depuis_notion():
         print(f"[INFO] {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"[ERREUR] chargement seuils : {e}", flush=True)
-
-async def mettre_a_jour_seuils_auto():
-    try:
-        print("[INFO] Mise à jour automatique des seuils (calcul depuis Polygon)", flush=True)
-
-        yesterday = (datetime.utcnow().date() - timedelta(days=1)).isoformat()
-        today = datetime.utcnow().date().isoformat()
-        url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{yesterday}/{yesterday}"
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params={
-                "adjusted": "true",
-                "sort": "desc",
-                "limit": 1,
-                "apiKey": POLYGON_API_KEY
-            }, timeout=10)
-
-            response.raise_for_status()
-            results = response.json().get("results", [])
-
-            if not results:
-                print("[WARN] Aucune donnée reçue de Polygon pour la veille", flush=True)
-                return
-
-            candle = results[0]
-            high = candle["h"]
-            low = candle["l"]
-            close = candle["c"]
-
-            pivot = round((high + low + close) / 3, 2)
-            r1 = round(2 * pivot - low, 2)
-            s1 = round(2 * pivot - high, 2)
-            r2 = round(pivot + (high - low), 2)
-            s2 = round(pivot - (high - low), 2)
-
-            seuils = [
-                {"valeur": r2, "type": "résistance"},
-                {"valeur": r1, "type": "résistance"},
-                {"valeur": pivot, "type": "pivot"},
-                {"valeur": s1, "type": "support"},
-                {"valeur": s2, "type": "support"},
-            ]
-
-            for seuil in seuils:
-                notion.pages.create(
-                    parent={"database_id": SEUILS_DATABASE_ID},
-                    properties={
-                        "Valeur": {"number": seuil["valeur"]},
-                        "Type": {"select": {"name": seuil["type"]}},
-                        "Date": {"date": {"start": today}}
-                    }
-                )
-
-            print(f"[INFO] Seuils enregistrés pour {today} (données du {yesterday})", flush=True)
-
-    except Exception as e:
-        print(f"[ERREUR] dans mettre_a_jour_seuils_auto : {e}", flush=True)
 
 def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
