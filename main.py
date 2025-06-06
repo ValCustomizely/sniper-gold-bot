@@ -1,7 +1,7 @@
 import asyncio
 import httpx
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from notion_client import Client
 
 notion = Client(auth=os.environ["NOTION_API_KEY"])
@@ -52,8 +52,60 @@ async def charger_seuils_depuis_notion():
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
 
 async def mettre_a_jour_seuils_auto():
-    print("🔁 Mise à jour automatique des seuils à 4h UTC", flush=True)
-    await charger_seuils_depuis_notion()
+    try:
+        print("🧲 Mise à jour automatique des seuils (calcul depuis Polygon)", flush=True)
+
+        yesterday = (datetime.utcnow().date() - timedelta(days=1)).isoformat()
+        url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{yesterday}/{yesterday}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params={
+                "adjusted": "true",
+                "sort": "desc",
+                "limit": 1,
+                "apiKey": POLYGON_API_KEY
+            }, timeout=10)
+
+            response.raise_for_status()
+            results = response.json().get("results", [])
+
+            if not results:
+                print("⚠️ Aucune donnée reçue de Polygon pour la veille", flush=True)
+                return
+
+            candle = results[0]
+            high = candle["h"]
+            low = candle["l"]
+            close = candle["c"]
+
+            pivot = round((high + low + close) / 3, 2)
+            r1 = round(2 * pivot - low, 2)
+            s1 = round(2 * pivot - high, 2)
+            r2 = round(pivot + (high - low), 2)
+            s2 = round(pivot - (high - low), 2)
+
+            seuils = [
+                {"valeur": r2, "type": "résistance"},
+                {"valeur": r1, "type": "résistance"},
+                {"valeur": pivot, "type": "pivot"},
+                {"valeur": s1, "type": "support"},
+                {"valeur": s2, "type": "support"},
+            ]
+
+            for seuil in seuils:
+                notion.pages.create(
+                    parent={"database_id": SEUILS_DATABASE_ID},
+                    properties={
+                        "Valeur": {"number": seuil["valeur"]},
+                        "Type": {"select": {"name": seuil["type"]}},
+                        "Date": {"date": {"start": yesterday}}
+                    }
+                )
+
+            print(f"✅ Seuils calculés et enregistrés pour {yesterday}", flush=True)
+
+    except Exception as e:
+        print(f"❌ Erreur dans mettre_a_jour_seuils_auto : {e}", flush=True)
 
 def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
