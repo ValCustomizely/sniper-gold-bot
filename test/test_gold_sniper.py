@@ -23,13 +23,15 @@ def reset_globals():
 
 # --- 1. Chargement des seuils ---
 def test_charger_seuils_depuis_notion_mock(monkeypatch):
+    today = datetime.utcnow().date().isoformat()
+
     class MockQueryResult:
         def get(self, key, default=None):
             if key == "results":
                 return [
-                    {"properties": {"Valeur": {"number": 3300}, "Type": {"select": {"name": "support"}}}},
-                    {"properties": {"Valeur": {"number": 3350}, "Type": {"select": {"name": "pivot"}}}},
-                    {"properties": {"Valeur": {"number": 3400}, "Type": {"select": {"name": "résistance"}}}},
+                    {"properties": {"Valeur": {"number": 3300}, "Type": {"select": {"name": "support"}}, "Date": {"date": {"start": today}}}},
+                    {"properties": {"Valeur": {"number": 3350}, "Type": {"select": {"name": "pivot"}}, "Date": {"date": {"start": today}}}},
+                    {"properties": {"Valeur": {"number": 3400}, "Type": {"select": {"name": "résistance"}}, "Date": {"date": {"start": today}}}},
                 ]
             return default
 
