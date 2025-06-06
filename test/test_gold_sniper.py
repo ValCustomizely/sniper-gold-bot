@@ -2,12 +2,14 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-import os
+
+# Simuler les variables d'environnement requises
 os.environ["NOTION_API_KEY"] = "fake"
 os.environ["NOTION_DATABASE_ID"] = "fake"
 os.environ["SEUILS_DATABASE_ID"] = "fake"
 os.environ["POLYGON_API_KEY"] = "fake"
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import main
 from datetime import datetime
 
