@@ -1,4 +1,3 @@
-import asyncio
 import httpx
 import os
 from datetime import datetime, timedelta
@@ -56,6 +55,7 @@ async def mettre_a_jour_seuils_auto():
         print("[INFO] Mise à jour automatique des seuils (calcul depuis Polygon)", flush=True)
 
         yesterday = (datetime.utcnow().date() - timedelta(days=1)).isoformat()
+        today = datetime.utcnow().date().isoformat()
         url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{yesterday}/{yesterday}"
 
         async with httpx.AsyncClient() as client:
@@ -98,11 +98,11 @@ async def mettre_a_jour_seuils_auto():
                     properties={
                         "Valeur": {"number": seuil["valeur"]},
                         "Type": {"select": {"name": seuil["type"]}},
-                        "Date": {"date": {"start": yesterday}}
+                        "Date": {"date": {"start": today}}
                     }
                 )
 
-            print(f"[INFO] Seuils calculés et enregistrés pour {yesterday}", flush=True)
+            print(f"[INFO] Seuils enregistrés pour {today} (données du {yesterday})", flush=True)
 
     except Exception as e:
         print(f"[ERREUR] dans mettre_a_jour_seuils_auto : {e}", flush=True)
@@ -155,13 +155,13 @@ async def fetch_gold_data():
                 nom_seuil = seuil["nom"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
                     ecart = round(last_price - seuil_val, 2)
-                    signal_type = f"Cassure {nom_seuil} +{ecart}$"
+                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     ecart = round(seuil_val - last_price, 2)
-                    signal_type = f"Cassure {nom_seuil} -{ecart}$"
+                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
                     break
@@ -173,10 +173,10 @@ async def fetch_gold_data():
 
                 if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
-                    signal_type = f"-{ecart}$ du R1"
+                    signal_type = f"🚧📈 -{ecart}$ du R1"
                 elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
-                    signal_type = f"+{ecart}$ du S1"
+                    signal_type = f"🚧📉 +{ecart}$ du S1"
 
             if not signal_type:
                 print("[WARN] Aucun signal défini (devrait être impossible)", flush=True)
@@ -189,7 +189,7 @@ async def fetch_gold_data():
                 else:
                     COMPTEUR_APRES_CASSURE += 1
                 if COMPTEUR_APRES_CASSURE >= 5:
-                    signal_type += " - Consolidation"
+                    signal_type += " 🚧"
 
             print(f"[SIGNAL] {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
@@ -202,8 +202,8 @@ async def fetch_gold_data():
             }
 
             if seuil_casse:
-                props["SL"] = {"number": round(seuil_casse - 1, 2) if "Cassure" in signal_type else round(seuil_casse + 1, 2)}
-                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "Cassure" in signal_type else round(last_price - 5, 2)}
+                props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
+                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
 
             notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
             print("[INFO] Signal ajouté à Notion", flush=True)
