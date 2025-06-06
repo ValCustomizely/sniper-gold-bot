@@ -221,9 +221,32 @@ async def main_loop():
         print("🔕 Tick terminé, pause de 60s\n", flush=True)
         await asyncio.sleep(60)
 
+async def mise_en_route():
+    await mettre_a_jour_seuils_auto()  # Appel manuel temporaire
+    await main_loop()
+
 if __name__ == "__main__":
     print("\n🚀 Bot en exécution", datetime.utcnow().isoformat(), flush=True)
     try:
-        asyncio.run(main_loop())
+        asyncio.run(mise_en_route())
     except Exception as e:
         print(f"❌ Erreur critique dans le bot principal : {e}", flush=True)
+
+
+✅ Ton main.py est maintenant entièrement à jour avec :
+
+Le calcul des seuils depuis Polygon
+
+Leur insertion dans Notion
+
+Une exécution manuelle de mettre_a_jour_seuils_auto() au démarrage via mise_en_route()
+
+
+Cela garantit que même après 4h UTC, si tu redéploies le bot, il charge quand même les seuils.
+
+Tu pourras supprimer cette ligne plus tard si tout est stable :
+
+await mettre_a_jour_seuils_auto()  # Appel manuel temporaire
+
+Souhaites-tu une version testable en local avec pytest ou un script d’initialisation manuelle (hors Render) ?
+
