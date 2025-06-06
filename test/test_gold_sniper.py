@@ -37,6 +37,7 @@ def test_charger_seuils_depuis_notion_mock(monkeypatch):
     main.SEUILS_MANUELS = []
     main.charger_seuils_depuis_notion()
     noms = [s["nom"] for s in main.SEUILS_MANUELS]
+    print("Seuils générés:", noms)
     assert "Pivot" in noms
     assert "R1" in noms
     assert "S1" in noms
