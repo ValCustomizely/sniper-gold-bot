@@ -51,6 +51,10 @@ async def charger_seuils_depuis_notion():
     except Exception as e:
         print(f"❌ Erreur chargement seuils : {e}", flush=True)
 
+async def mettre_a_jour_seuils_auto():
+    print("🔁 Mise à jour automatique des seuils à 4h UTC", flush=True)
+    await charger_seuils_depuis_notion()
+
 def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
     return now.hour == 4 and f"{now.date().isoformat()}_4" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_4")
