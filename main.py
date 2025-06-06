@@ -47,13 +47,13 @@ async def charger_seuils_depuis_notion():
         for i, val in enumerate(sorted(supports, reverse=True)):
             SEUILS_MANUELS.append({"valeur": val, "type": "support", "nom": f"S{i+1}"})
 
-        print(f"🗕️ {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
+        print(f"[INFO] {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
-        print(f"❌ Erreur chargement seuils : {e}", flush=True)
+        print(f"[ERREUR] chargement seuils : {e}", flush=True)
 
 async def mettre_a_jour_seuils_auto():
     try:
-        print("🧲 Mise à jour automatique des seuils (calcul depuis Polygon)", flush=True)
+        print("[INFO] Mise à jour automatique des seuils (calcul depuis Polygon)", flush=True)
 
         yesterday = (datetime.utcnow().date() - timedelta(days=1)).isoformat()
         url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{yesterday}/{yesterday}"
@@ -70,7 +70,7 @@ async def mettre_a_jour_seuils_auto():
             results = response.json().get("results", [])
 
             if not results:
-                print("⚠️ Aucune donnée reçue de Polygon pour la veille", flush=True)
+                print("[WARN] Aucune donnée reçue de Polygon pour la veille", flush=True)
                 return
 
             candle = results[0]
@@ -102,10 +102,10 @@ async def mettre_a_jour_seuils_auto():
                     }
                 )
 
-            print(f"✅ Seuils calculés et enregistrés pour {yesterday}", flush=True)
+            print(f"[INFO] Seuils calculés et enregistrés pour {yesterday}", flush=True)
 
     except Exception as e:
-        print(f"❌ Erreur dans mettre_a_jour_seuils_auto : {e}", flush=True)
+        print(f"[ERREUR] dans mettre_a_jour_seuils_auto : {e}", flush=True)
 
 def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
@@ -115,10 +115,10 @@ async def fetch_gold_data():
     global DERNIER_SEUIL_CASSE, COMPTEUR_APRES_CASSURE
 
     now = datetime.utcnow()
-    print(f"[fetch_gold_data] ⏳ Début de la récupération à {now.isoformat()}", flush=True)
+    print(f"[fetch_gold_data] Début de la récupération à {now.isoformat()}", flush=True)
 
     if now.hour >= 21 or now.hour < 4:
-        print(f"⏸️ Marché fermé (UTC {now.hour}h), tick ignoré", flush=True)
+        print(f"[INFO] Marché fermé (UTC {now.hour}h), tick ignoré", flush=True)
         return
 
     await charger_seuils_depuis_notion()
@@ -138,7 +138,7 @@ async def fetch_gold_data():
             results = response.json().get("results", [])
 
             if not results:
-                print("❌ Aucune donnée reçue", flush=True)
+                print("[ERREUR] Aucune donnée reçue", flush=True)
                 return
 
             candle = results[0]
@@ -155,13 +155,13 @@ async def fetch_gold_data():
                 nom_seuil = seuil["nom"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
                     ecart = round(last_price - seuil_val, 2)
-                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
+                    signal_type = f"Cassure {nom_seuil} +{ecart}$"
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     ecart = round(seuil_val - last_price, 2)
-                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
+                    signal_type = f"Cassure {nom_seuil} -{ecart}$"
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
                     break
@@ -173,13 +173,13 @@ async def fetch_gold_data():
 
                 if pivot and r1 and pivot < last_price < r1:
                     ecart = round(r1 - last_price, 2)
-                    signal_type = f"🚧📈 -{ecart}$ du R1"
+                    signal_type = f"-{ecart}$ du R1"
                 elif pivot and s1 and s1 < last_price < pivot:
                     ecart = round(last_price - s1, 2)
-                    signal_type = f"🚧📉 +{ecart}$ du S1"
+                    signal_type = f"+{ecart}$ du S1"
 
             if not signal_type:
-                print("⚠️ ERREUR : aucun signal défini (devrait être impossible)", flush=True)
+                print("[WARN] Aucun signal défini (devrait être impossible)", flush=True)
                 return
 
             if seuil_casse:
@@ -189,9 +189,9 @@ async def fetch_gold_data():
                 else:
                     COMPTEUR_APRES_CASSURE += 1
                 if COMPTEUR_APRES_CASSURE >= 5:
-                    signal_type += " 🚧"
+                    signal_type += " - Consolidation"
 
-            print(f"✅ {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
+            print(f"[SIGNAL] {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
 
             props = {
                 "Signal": {"title": [{"text": {"content": signal_type}}]},
@@ -202,23 +202,23 @@ async def fetch_gold_data():
             }
 
             if seuil_casse:
-                props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
-                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
+                props["SL"] = {"number": round(seuil_casse - 1, 2) if "Cassure" in signal_type else round(seuil_casse + 1, 2)}
+                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "Cassure" in signal_type else round(last_price - 5, 2)}
 
             notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
-            print("✅ Signal ajouté à Notion", flush=True)
+            print("[INFO] Signal ajouté à Notion", flush=True)
 
         except Exception as e:
-            print(f"❌ Erreur attrapée dans fetch_gold_data : {e}", flush=True)
+            print(f"[ERREUR] attrapée dans fetch_gold_data : {e}", flush=True)
 
 async def main_loop():
     while True:
         now = datetime.utcnow()
-        print("\n🔁 Tick exécuté ", now.isoformat(), flush=True)
+        print(f"[TICK] Tick exécuté {now.isoformat()}", flush=True)
         if est_heure_de_mise_a_jour_solide():
             await mettre_a_jour_seuils_auto()
         await fetch_gold_data()
-        print("🔕 Tick terminé, pause de 60s\n", flush=True)
+        print("[PAUSE] Tick terminé, pause de 60s\n", flush=True)
         await asyncio.sleep(60)
 
 async def mise_en_route():
@@ -226,27 +226,8 @@ async def mise_en_route():
     await main_loop()
 
 if __name__ == "__main__":
-    print("\n🚀 Bot en exécution", datetime.utcnow().isoformat(), flush=True)
+    print(f"[BOOT] Bot en exécution {datetime.utcnow().isoformat()}", flush=True)
     try:
         asyncio.run(mise_en_route())
     except Exception as e:
-        print(f"❌ Erreur critique dans le bot principal : {e}", flush=True)
-
-
-✅ Ton main.py est maintenant entièrement à jour avec :
-
-Le calcul des seuils depuis Polygon
-
-Leur insertion dans Notion
-
-Une exécution manuelle de mettre_a_jour_seuils_auto() au démarrage via mise_en_route()
-
-
-Cela garantit que même après 4h UTC, si tu redéploies le bot, il charge quand même les seuils.
-
-Tu pourras supprimer cette ligne plus tard si tout est stable :
-
-await mettre_a_jour_seuils_auto()  # Appel manuel temporaire
-
-Souhaites-tu une version testable en local avec pytest ou un script d’initialisation manuelle (hors Render) ?
-
+        print(f"[ERREUR] critique dans le bot principal : {e}", flush=True)
