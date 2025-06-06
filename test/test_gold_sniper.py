@@ -30,7 +30,7 @@ def test_charger_seuils_depuis_notion_mock(monkeypatch):
             {"properties": {"Valeur": {"number": 3400}, "Type": {"select": {"name": "résistance"}}}},
         ]
     }
-    monkeypatch.setattr(main.notion.databases, "query", mock_query)
+    monkeypatch.setattr(type(main.notion.databases), "query", lambda self, **kwargs: mock_query())
     main.SEUILS_MANUELS = []
     main.charger_seuils_depuis_notion()
     noms = [s["nom"] for s in main.SEUILS_MANUELS]
