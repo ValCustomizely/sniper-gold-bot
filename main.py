@@ -240,7 +240,6 @@ async def main_loop():
         await asyncio.sleep(60)
 
 async def mise_en_route():
-    await mettre_a_jour_seuils_auto()  # Appel manuel temporaire
     await main_loop()
 
 if __name__ == "__main__":
