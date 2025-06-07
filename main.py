@@ -128,6 +128,11 @@ def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
     return now.hour == 1 and f"{now.date().isoformat()}_1" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_1")
 
+def calculer_tp(seuil_casse, pivot):
+    if seuil_casse is None or pivot is None:
+        return None
+    return round(seuil_casse + (seuil_casse - pivot) * 0.8, 2)
+
 async def fetch_gold_data():
     global DERNIER_SEUIL_CASSE, COMPTEUR_APRES_CASSURE
 
@@ -221,6 +226,7 @@ async def fetch_gold_data():
             if seuil_casse:
                 props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
                 props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
+                props["TP"] = {"number": calculer_tp(seuil_casse, pivot)}
 
             notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
             print("[INFO] Signal ajouté à Notion", flush=True)
