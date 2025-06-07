@@ -188,12 +188,12 @@ async def fetch_gold_data():
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
 
-                if pivot and r1 and pivot < last_price < r1:
+                if pivot and r1 and pivot < last_price <= r1 + 0.5:
                     ecart = round(r1 - last_price, 2)
-                    signal_type = f"🚧📈 -{ecart}$ du R1"
-                elif pivot and s1 and s1 < last_price < pivot:
+                    signal_type = f"🚧📈 -{abs(ecart)}$ du R1"
+                elif pivot and s1 and s1 - 0.5 <= last_price < pivot:
                     ecart = round(last_price - s1, 2)
-                    signal_type = f"🚧📉 +{ecart}$ du S1"
+                    signal_type = f"🚧📉 +{abs(ecart)}$ du S1"
 
             if not signal_type:
                 print("[WARN] Aucun signal défini (devrait être impossible)", flush=True)
@@ -235,7 +235,8 @@ async def main_loop():
         if est_heure_de_mise_a_jour_solide():
             await mettre_a_jour_seuils_auto()
         await fetch_gold_data()
-        print("[PAUSE] Tick terminé, pause de 60s\n", flush=True)
+        print("[PAUSE] Tick terminé, pause de 60s
+", flush=True)
         await asyncio.sleep(60)
 
 async def mise_en_route():
