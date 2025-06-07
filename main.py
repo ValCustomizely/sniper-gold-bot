@@ -14,11 +14,23 @@ DERNIERE_MAJ_HORAIRES = set()
 DERNIER_SEUIL_CASSE = None
 COMPTEUR_APRES_CASSURE = 0
 
+def get_last_trading_day():
+    today = datetime.utcnow().date()
+    weekday = today.weekday()
+    if weekday == 0:
+        return today - timedelta(days=3)  # Lundi → Vendredi
+    elif weekday == 6:
+        return today - timedelta(days=2)  # Dimanche → Vendredi
+    elif weekday == 5:
+        return today - timedelta(days=1)  # Samedi → Vendredi
+    else:
+        return today - timedelta(days=1)  # Autres jours → veille
+
 async def mettre_a_jour_seuils_auto():
     try:
         print("[INFO] Mise à jour automatique des seuils (calcul depuis Polygon)", flush=True)
 
-        yesterday = (datetime.utcnow().date() - timedelta(days=1)).isoformat()
+        yesterday = get_last_trading_day().isoformat()
         today = datetime.utcnow().date().isoformat()
         url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{yesterday}/{yesterday}"
 
@@ -111,6 +123,10 @@ async def charger_seuils_depuis_notion():
         print(f"[INFO] {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
     except Exception as e:
         print(f"[ERREUR] chargement seuils : {e}", flush=True)
+
+def est_heure_de_mise_a_jour_solide():
+    now = datetime.utcnow()
+    return now.hour == 1 and f"{now.date().isoformat()}_1" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_1")
 
 async def fetch_gold_data():
     global DERNIER_SEUIL_CASSE, COMPTEUR_APRES_CASSURE
@@ -212,21 +228,18 @@ async def fetch_gold_data():
         except Exception as e:
             print(f"[ERREUR] attrapée dans fetch_gold_data : {e}", flush=True)
 
-def est_heure_de_mise_a_jour_1h():
-    now = datetime.utcnow()
-    return now.hour == 1 and f"{now.date().isoformat()}_1" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_1")
-
 async def main_loop():
     while True:
         now = datetime.utcnow()
         print(f"[TICK] Tick exécuté {now.isoformat()}", flush=True)
-        if est_heure_de_mise_a_jour_1h():
+        if est_heure_de_mise_a_jour_solide():
             await mettre_a_jour_seuils_auto()
         await fetch_gold_data()
         print("[PAUSE] Tick terminé, pause de 60s\n", flush=True)
         await asyncio.sleep(60)
 
 async def mise_en_route():
+    await mettre_a_jour_seuils_auto()  # Appel manuel temporaire
     await main_loop()
 
 if __name__ == "__main__":
