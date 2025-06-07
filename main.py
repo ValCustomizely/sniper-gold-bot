@@ -235,8 +235,7 @@ async def main_loop():
         if est_heure_de_mise_a_jour_solide():
             await mettre_a_jour_seuils_auto()
         await fetch_gold_data()
-        print("[PAUSE] Tick terminé, pause de 60s
-", flush=True)
+        print("[PAUSE] Tick terminé, pause de 60s", flush=True)
         await asyncio.sleep(60)
 
 async def mise_en_route():
