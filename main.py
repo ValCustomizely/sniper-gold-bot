@@ -73,13 +73,23 @@ async def mettre_a_jour_seuils_auto():
             ]
 
             for seuil in seuils:
+                tp = None
+                if seuil["type"] == "résistance" and seuil["valeur"] > pivot:
+                    tp = round(seuil["valeur"] + (seuil["valeur"] - pivot) * 0.8, 2)
+                elif seuil["type"] == "support" and seuil["valeur"] < pivot:
+                    tp = round(seuil["valeur"] - (pivot - seuil["valeur"]) * 0.8, 2)
+
+                properties = {
+                    "Valeur": {"number": seuil["valeur"]},
+                    "Type": {"select": {"name": seuil["type"]}},
+                    "Date": {"date": {"start": today}}
+                }
+                if tp:
+                    properties["TP"] = {"number": tp}
+
                 notion.pages.create(
                     parent={"database_id": SEUILS_DATABASE_ID},
-                    properties={
-                        "Valeur": {"number": seuil["valeur"]},
-                        "Type": {"select": {"name": seuil["type"]}},
-                        "Date": {"date": {"start": today}}
-                    }
+                    properties=properties
                 )
 
             print(f"[INFO] 7 seuils enregistrés pour {today} (données du {yesterday})", flush=True)
@@ -138,10 +148,6 @@ async def fetch_gold_data():
 
     now = datetime.utcnow()
     print(f"[fetch_gold_data] Début de la récupération à {now.isoformat()}", flush=True)
-
-    #if now.hour >= 21 or now.hour < 4:
-    #    print(f"[INFO] Marché fermé (UTC {now.hour}h), tick ignoré", flush=True)
-    #    return
 
     await charger_seuils_depuis_notion()
 
