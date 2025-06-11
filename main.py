@@ -171,6 +171,7 @@ async def fetch_gold_data():
             signal_type = None
             seuil_casse = None
             nom_seuil_casse = None
+            pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
 
             for seuil in SEUILS_MANUELS:
                 seuil_val = seuil["valeur"]
@@ -190,7 +191,6 @@ async def fetch_gold_data():
                     break
 
             if signal_type is None:
-                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
 
