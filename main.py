@@ -73,23 +73,13 @@ async def mettre_a_jour_seuils_auto():
             ]
 
             for seuil in seuils:
-                tp = None
-                if seuil["type"] == "résistance" and seuil["valeur"] > pivot:
-                    tp = round(seuil["valeur"] + (seuil["valeur"] - pivot) * 0.8, 2)
-                elif seuil["type"] == "support" and seuil["valeur"] < pivot:
-                    tp = round(seuil["valeur"] - (pivot - seuil["valeur"]) * 0.8, 2)
-
-                properties = {
-                    "Valeur": {"number": seuil["valeur"]},
-                    "Type": {"select": {"name": seuil["type"]}},
-                    "Date": {"date": {"start": today}}
-                }
-                if tp:
-                    properties["TP"] = {"number": tp}
-
                 notion.pages.create(
                     parent={"database_id": SEUILS_DATABASE_ID},
-                    properties=properties
+                    properties={
+                        "Valeur": {"number": seuil["valeur"]},
+                        "Type": {"select": {"name": seuil["type"]}},
+                        "Date": {"date": {"start": today}}
+                    }
                 )
 
             print(f"[INFO] 7 seuils enregistrés pour {today} (données du {yesterday})", flush=True)
@@ -183,19 +173,20 @@ async def fetch_gold_data():
                 nom_seuil = seuil["nom"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
                     ecart = round(last_price - seuil_val, 2)
-                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
+                    signal_type = f"\U0001f4c8 Cassure {nom_seuil} +{ecart}$"
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     ecart = round(seuil_val - last_price, 2)
-                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
+                    signal_type = f"\U0001f4c9 Cassure {nom_seuil} -{ecart}$"
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
                     break
 
+            pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
+
             if signal_type is None:
-                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
 
