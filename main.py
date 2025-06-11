@@ -173,24 +173,26 @@ async def fetch_gold_data():
             nom_seuil_casse = None
             pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
 
-            for seuil in SEUILS_MANUELS:
-                seuil_val = seuil["valeur"]
-                seuil_type = seuil["type"]
-                nom_seuil = seuil["nom"]
-                if seuil_type == "résistance" and last_price > seuil_val + 0.5:
-                    ecart = round(last_price - seuil_val, 2)
-                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
-                    seuil_casse = seuil_val
-                    nom_seuil_casse = nom_seuil
-                    break
-                elif seuil_type == "support" and last_price < seuil_val - 0.5:
-                    ecart = round(seuil_val - last_price, 2)
-                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
-                    seuil_casse = seuil_val
-                    nom_seuil_casse = nom_seuil
-                    break
+            cassures_resistances = [
+                (seuil["valeur"], seuil["nom"])
+                for seuil in SEUILS_MANUELS
+                if seuil["type"] == "résistance" and last_price > seuil["valeur"] + 0.5
+            ]
+            cassures_supports = [
+                (seuil["valeur"], seuil["nom"])
+                for seuil in SEUILS_MANUELS
+                if seuil["type"] == "support" and last_price < seuil["valeur"] - 0.5
+            ]
 
-            if signal_type is None:
+            if cassures_resistances:
+                seuil_casse, nom_seuil_casse = max(cassures_resistances, key=lambda x: x[0])
+                ecart = round(last_price - seuil_casse, 2)
+                signal_type = f"📈 Cassure {nom_seuil_casse} +{ecart}$"
+            elif cassures_supports:
+                seuil_casse, nom_seuil_casse = min(cassures_supports, key=lambda x: x[0])
+                ecart = round(seuil_casse - last_price, 2)
+                signal_type = f"📉 Cassure {nom_seuil_casse} -{ecart}$"
+            else:
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
 
