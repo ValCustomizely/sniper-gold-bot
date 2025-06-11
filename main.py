@@ -18,13 +18,13 @@ def get_last_trading_day():
     today = datetime.utcnow().date()
     weekday = today.weekday()
     if weekday == 0:
-        return today - timedelta(days=3)  # Lundi → Vendredi
+        return today - timedelta(days=3)
     elif weekday == 6:
-        return today - timedelta(days=2)  # Dimanche → Vendredi
+        return today - timedelta(days=2)
     elif weekday == 5:
-        return today - timedelta(days=1)  # Samedi → Vendredi
+        return today - timedelta(days=1)
     else:
-        return today - timedelta(days=1)  # Autres jours → veille
+        return today - timedelta(days=1)
 
 async def mettre_a_jour_seuils_auto():
     try:
@@ -141,6 +141,11 @@ async def fetch_gold_data():
 
     await charger_seuils_depuis_notion()
 
+    if not SEUILS_MANUELS:
+        print("[WARN] Aucun seuil trouvé, mise à jour forcée...", flush=True)
+        await mettre_a_jour_seuils_auto()
+        await charger_seuils_depuis_notion()
+
     today = now.date().isoformat()
     url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/minute/{today}/{today}"
 
@@ -173,20 +178,19 @@ async def fetch_gold_data():
                 nom_seuil = seuil["nom"]
                 if seuil_type == "résistance" and last_price > seuil_val + 0.5:
                     ecart = round(last_price - seuil_val, 2)
-                    signal_type = f"\U0001f4c8 Cassure {nom_seuil} +{ecart}$"
+                    signal_type = f"📈 Cassure {nom_seuil} +{ecart}$"
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
                     break
                 elif seuil_type == "support" and last_price < seuil_val - 0.5:
                     ecart = round(seuil_val - last_price, 2)
-                    signal_type = f"\U0001f4c9 Cassure {nom_seuil} -{ecart}$"
+                    signal_type = f"📉 Cassure {nom_seuil} -{ecart}$"
                     seuil_casse = seuil_val
                     nom_seuil_casse = nom_seuil
                     break
 
-            pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
-
             if signal_type is None:
+                pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
 
