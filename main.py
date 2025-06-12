@@ -13,9 +13,6 @@ SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 SEUILS_MANUELS = []
 DERNIERE_MAJ_HORAIRES = set()
 
-ETATS_PAR_SESSION = {}
-
-
 def get_etat_path(session):
     return f"etat_cassure_{session}.json"
 
@@ -51,59 +48,6 @@ def calculer_tp(seuil_casse, pivot):
 def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
     return now.hour == 1 and f"{now.date().isoformat()}_1" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_1")
-
-async def mettre_a_jour_seuils_auto():
-    try:
-        print("[INFO] Mise à jour automatique des seuils", flush=True)
-        yesterday = get_last_trading_day().isoformat()
-        today = datetime.utcnow().date().isoformat()
-        url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{yesterday}/{yesterday}"
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params={
-                "adjusted": "true",
-                "sort": "desc",
-                "limit": 1,
-                "apiKey": POLYGON_API_KEY
-            }, timeout=10)
-            response.raise_for_status()
-            results = response.json().get("results", [])
-
-            if not results:
-                print("[WARN] Aucune donnée Polygon", flush=True)
-                return
-
-            candle = results[0]
-            high, low, close = candle["h"], candle["l"], candle["c"]
-            pivot = round((high + low + close) / 3, 2)
-            r1 = round((2 * pivot) - low, 2)
-            s1 = round((2 * pivot) - high, 2)
-            r2 = round(pivot + (high - low), 2)
-            s2 = round(pivot - (high - low), 2)
-            r3 = round(high + 2 * (pivot - low), 2)
-            s3 = round(low - 2 * (high - pivot), 2)
-
-            seuils = [
-                {"valeur": r3, "type": "résistance"},
-                {"valeur": r2, "type": "résistance"},
-                {"valeur": r1, "type": "résistance"},
-                {"valeur": pivot, "type": "pivot"},
-                {"valeur": s1, "type": "support"},
-                {"valeur": s2, "type": "support"},
-                {"valeur": s3, "type": "support"},
-            ]
-
-            for session in ["journalier", "asie", "us"]:
-                for seuil in seuils:
-                    notion.pages.create(parent={"database_id": SEUILS_DATABASE_ID}, properties={
-                        "Valeur": {"number": seuil["valeur"]},
-                        "Type": {"select": {"name": seuil["type"]}},
-                        "Date": {"date": {"start": today}},
-                        "Session": {"select": {"name": session}}
-                    })
-            print(f"[INFO] Seuils mis à jour pour {today}", flush=True)
-    except Exception as e:
-        print(f"[ERREUR] seuils auto : {e}", flush=True)
 
 async def charger_seuils_depuis_notion(session):
     global SEUILS_MANUELS
@@ -194,12 +138,16 @@ async def fetch_gold_data(session="journalier"):
                     signal_type += " 🚧"
 
             props = {
-                "Signal": {"title": [{"text": {"content": signal_type or ""}}]},
                 "Horodatage": {"date": {"start": now.isoformat()}},
                 "Prix": {"number": float(last_price)},
                 "Volume": {"number": int(volume)},
                 "Commentaire": {"rich_text": [{"text": {"content": f"Session : {session}"}}]}
             }
+
+            if session == "journalier":
+                props["Signal (journalier)"] = {"title": [{"text": {"content": signal_type or "RAS"}}]}
+            else:
+                props["Signal (session)"] = {"rich_text": [{"text": {"content": signal_type or "RAS"}}]}
 
             if signal_type and seuil_casse:
                 props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
@@ -211,6 +159,58 @@ async def fetch_gold_data(session="journalier"):
 
         except Exception as e:
             print(f"[ERREUR] fetch_gold_data ({session}) : {e}", flush=True)
+
+async def mettre_a_jour_seuils_auto():
+    try:
+        print("[INFO] Mise à jour automatique des seuils", flush=True)
+        yesterday = get_last_trading_day().isoformat()
+        today = datetime.utcnow().date().isoformat()
+        url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{yesterday}/{yesterday}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params={
+                "adjusted": "true",
+                "sort": "desc",
+                "limit": 1,
+                "apiKey": POLYGON_API_KEY
+            }, timeout=10)
+            response.raise_for_status()
+            results = response.json().get("results", [])
+
+            if not results:
+                print("[WARN] Aucune donnée Polygon", flush=True)
+                return
+
+            candle = results[0]
+            high, low, close = candle["h"], candle["l"], candle["c"]
+            pivot = round((high + low + close) / 3, 2)
+            r1 = round((2 * pivot) - low, 2)
+            s1 = round((2 * pivot) - high, 2)
+            r2 = round(pivot + (high - low), 2)
+            s2 = round(pivot - (high - low), 2)
+            r3 = round(high + 2 * (pivot - low), 2)
+            s3 = round(low - 2 * (high - pivot), 2)
+
+            seuils = [
+                {"valeur": r3, "type": "résistance"},
+                {"valeur": r2, "type": "résistance"},
+                {"valeur": r1, "type": "résistance"},
+                {"valeur": pivot, "type": "pivot"},
+                {"valeur": s1, "type": "support"},
+                {"valeur": s2, "type": "support"},
+                {"valeur": s3, "type": "support"},
+            ]
+
+            for seuil in seuils:
+                notion.pages.create(parent={"database_id": SEUILS_DATABASE_ID}, properties={
+                    "Valeur": {"number": seuil["valeur"]},
+                    "Type": {"select": {"name": seuil["type"]}},
+                    "Date": {"date": {"start": today}},
+                    "Session": {"select": {"name": "journalier"}}
+                })
+            print(f"[INFO] Seuils mis à jour pour {today}", flush=True)
+    except Exception as e:
+        print(f"[ERREUR] seuils auto : {e}", flush=True)
 
 async def main_loop():
     while True:
