@@ -195,7 +195,7 @@ async def fetch_gold_data(seuil_source="journalier"):
                 }
 
                 if seuil_source == "journalier":
-                    props["Signal (journalier)"] = {"rich_text": [{"text": {"content": signal_type}}]}
+                    props["Signal (journalier)"] = {"title": [{"text": {"content": signal_type}}]}
                 else:
                     props["Signal (session)"] = {"rich_text": [{"text": {"content": signal_type}}]}
 
