@@ -37,56 +37,93 @@ def get_last_trading_day():
     else:
         return today - timedelta(days=1)
 
+def calculer_seuils(high, low, close):
+    pivot = round((high + low + close) / 3, 2)
+    r1 = round((2 * pivot) - low, 2)
+    s1 = round((2 * pivot) - high, 2)
+    r2 = round(pivot + (high - low), 2)
+    s2 = round(pivot - (high - low), 2)
+    r3 = round(high + 2 * (pivot - low), 2)
+    s3 = round(low - 2 * (high - pivot), 2)
+    return [
+        ("R3", r3, "résistance"),
+        ("R2", r2, "résistance"),
+        ("R1", r1, "résistance"),
+        ("Pivot", pivot, "pivot"),
+        ("S1", s1, "support"),
+        ("S2", s2, "support"),
+        ("S3", s3, "support")
+    ]
+
+async def enregistrer_seuils_notions(seuils, session):
+    today = datetime.utcnow().date().isoformat()
+    for nom, valeur, type_ in seuils:
+        notion.pages.create(parent={"database_id": SEUILS_DATABASE_ID}, properties={
+            "Nom": {"title": [{"text": {"content": nom}}]},
+            "Valeur": {"number": valeur},
+            "Type": {"select": {"name": type_}},
+            "Date": {"date": {"start": today}},
+            "Session": {"select": {"name": session}}
+        })
+
 async def mettre_a_jour_seuils_auto():
     try:
-        print("[INFO] Mise à jour automatique des seuils", flush=True)
+        print("[INFO] Mise à jour des seuils journalier", flush=True)
         yesterday = get_last_trading_day().isoformat()
-        today = datetime.utcnow().date().isoformat()
         url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{yesterday}/{yesterday}"
-
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, params={
-                "adjusted": "true",
-                "sort": "desc",
-                "limit": 1,
-                "apiKey": POLYGON_API_KEY
-            }, timeout=10)
+            response = await client.get(url, params={"adjusted": "true", "sort": "desc", "limit": 1, "apiKey": POLYGON_API_KEY}, timeout=10)
             response.raise_for_status()
             results = response.json().get("results", [])
-
             if not results:
-                print("[WARN] Aucune donnée Polygon", flush=True)
+                print("[WARN] Pas de données Polygon", flush=True)
                 return
-
             candle = results[0]
-            high, low, close = candle["h"], candle["l"], candle["c"]
-            pivot = round((high + low + close) / 3, 2)
-            r1 = round((2 * pivot) - low, 2)
-            s1 = round((2 * pivot) - high, 2)
-            r2 = round(pivot + (high - low), 2)
-            s2 = round(pivot - (high - low), 2)
-            r3 = round(high + 2 * (pivot - low), 2)
-            s3 = round(low - 2 * (high - pivot), 2)
-
-            seuils = [
-                {"valeur": r3, "type": "résistance"},
-                {"valeur": r2, "type": "résistance"},
-                {"valeur": r1, "type": "résistance"},
-                {"valeur": pivot, "type": "pivot"},
-                {"valeur": s1, "type": "support"},
-                {"valeur": s2, "type": "support"},
-                {"valeur": s3, "type": "support"},
-            ]
-
-            for seuil in seuils:
-                notion.pages.create(parent={"database_id": SEUILS_DATABASE_ID}, properties={
-                    "Valeur": {"number": seuil["valeur"]},
-                    "Type": {"select": {"name": seuil["type"]}},
-                    "Date": {"date": {"start": today}}
-                })
-            print(f"[INFO] Seuils mis à jour pour {today}", flush=True)
+            seuils = calculer_seuils(candle["h"], candle["l"], candle["c"])
+            await enregistrer_seuils_notions(seuils, "journalier")
     except Exception as e:
-        print(f"[ERREUR] seuils auto : {e}", flush=True)
+        print(f"[ERREUR] seuils journalier : {e}", flush=True)
+
+async def mettre_a_jour_seuils_asie():
+    try:
+        print("[INFO] Mise à jour des seuils Asie", flush=True)
+        today = datetime.utcnow().date().isoformat()
+        url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/hour/{today}/{today}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params={"adjusted": "true", "sort": "asc", "limit": 4, "apiKey": POLYGON_API_KEY}, timeout=10)
+            response.raise_for_status()
+            results = response.json().get("results", [])
+            if not results:
+                print("[WARN] Pas de données pour seuils Asie", flush=True)
+                return
+            high = max(r["h"] for r in results)
+            low = min(r["l"] for r in results)
+            close = results[-1]["c"]
+            seuils = calculer_seuils(high, low, close)
+            await enregistrer_seuils_notions(seuils, "asie")
+    except Exception as e:
+        print(f"[ERREUR] seuils asie : {e}", flush=True)
+
+async def mettre_a_jour_seuils_us():
+    try:
+        print("[INFO] Mise à jour des seuils US", flush=True)
+        today = datetime.utcnow().date().isoformat()
+        url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/hour/{today}/{today}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params={"adjusted": "true", "sort": "asc", "limit": 17, "apiKey": POLYGON_API_KEY}, timeout=10)
+            response.raise_for_status()
+            results = response.json().get("results", [])
+            if len(results) < 17:
+                print("[WARN] Pas assez de données horaires pour seuils US", flush=True)
+                return
+            us_range = results[13:17]  # de 13h à 17h UTC
+            high = max(r["h"] for r in us_range)
+            low = min(r["l"] for r in us_range)
+            close = us_range[-1]["c"]
+            seuils = calculer_seuils(high, low, close)
+            await enregistrer_seuils_notions(seuils, "us")
+    except Exception as e:
+        print(f"[ERREUR] seuils us : {e}", flush=True)
 
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
