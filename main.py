@@ -210,6 +210,10 @@ async def fetch_gold_data(seuil_source="journalier"):
         except Exception as e:
             print(f"[ERREUR] fetch_gold_data : {e}", flush=True)
 
+def est_heure_de_mise_a_jour_solide():
+    maintenant = datetime.utcnow()
+    return maintenant.hour == 1 and maintenant.minute == 0
+
 async def main_loop():
     while True:
         if est_heure_de_mise_a_jour_solide():
