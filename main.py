@@ -13,6 +13,9 @@ SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 SEUILS_MANUELS = []
 DERNIERE_MAJ_HORAIRES = set()
 
+ETATS_PAR_SESSION = {}
+
+
 def get_etat_path(session):
     return f"etat_cassure_{session}.json"
 
@@ -191,16 +194,12 @@ async def fetch_gold_data(session="journalier"):
                     signal_type += " 🚧"
 
             props = {
+                "Signal": {"title": [{"text": {"content": signal_type or ""}}]},
                 "Horodatage": {"date": {"start": now.isoformat()}},
                 "Prix": {"number": float(last_price)},
                 "Volume": {"number": int(volume)},
                 "Commentaire": {"rich_text": [{"text": {"content": f"Session : {session}"}}]}
             }
-
-            if session == "journalier":
-                props["Signal (journalier)"] = {"title": [{"text": {"content": signal_type or "RAS"}}]}
-            else:
-                props["Signal (session)"] = {"rich_text": [{"text": {"content": signal_type or "RAS"}}]}
 
             if signal_type and seuil_casse:
                 props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
