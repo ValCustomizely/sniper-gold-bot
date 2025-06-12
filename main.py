@@ -51,6 +51,9 @@ def est_heure_de_mise_a_jour_solide():
 
 async def mettre_a_jour_seuils_auto():
 
+
+
+
 async def charger_seuils_depuis_notion(session):
     global SEUILS_MANUELS
     try:
