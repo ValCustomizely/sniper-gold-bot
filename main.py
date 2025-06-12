@@ -66,6 +66,31 @@ async def enregistrer_seuils_notions(seuils, session):
             "Session": {"select": {"name": session}}
         })
 
+async def charger_seuils_depuis_notion(session="journalier"):
+    global SEUILS_MANUELS
+    today = datetime.utcnow().date().isoformat()
+    try:
+        response = notion.databases.query(
+            database_id=SEUILS_DATABASE_ID,
+            filter={
+                "and": [
+                    {"property": "Date", "date": {"equals": today}},
+                    {"property": "Session", "select": {"equals": session}}
+                ]
+            }
+        )
+        SEUILS_MANUELS = [
+            {
+                "nom": r["properties"]["Nom"]["title"][0]["text"]["content"],
+                "valeur": r["properties"]["Valeur"]["number"],
+                "type": r["properties"]["Type"]["select"]["name"]
+            }
+            for r in response["results"]
+        ]
+        print(f"[INFO] Seuils chargés pour session : {session}", flush=True)
+    except Exception as e:
+        print(f"[ERREUR] chargement seuils {session} : {e}", flush=True)
+
 async def mettre_a_jour_seuils_auto():
     try:
         print("[INFO] Mise à jour des seuils journalier", flush=True)
@@ -126,7 +151,7 @@ async def mettre_a_jour_seuils_us():
         print(f"[ERREUR] seuils us : {e}", flush=True)
 
 async def fetch_gold_data(seuil_source="journalier"):
-    await charger_seuils_depuis_notion()
+    await charger_seuils_depuis_notion(seuil_source)
     etat = charger_etat()
     now = datetime.utcnow()
     today = now.date().isoformat()
@@ -197,7 +222,7 @@ async def fetch_gold_data(seuil_source="journalier"):
                 if seuil_source == "journalier":
                     props["Signal (journalier)"] = {"title": [{"text": {"content": signal_type}}]}
                 else:
-                    props["Signal (session)"] = {"rich_text": [{"text": {"content": signal_type}}]}
+                    props["Signal (session)"] = {"rich_text": [{"text": {"content": f"{signal_type} ({seuil_source})"}}]}
 
                 if seuil_casse:
                     props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
@@ -214,12 +239,21 @@ def est_heure_de_mise_a_jour_solide():
     maintenant = datetime.utcnow()
     return maintenant.hour == 1 and maintenant.minute == 0
 
+async def fetch_all_sessions():
+    await fetch_gold_data("journalier")
+    await fetch_gold_data("asie")
+    await fetch_gold_data("us")
+
 async def main_loop():
     while True:
         if est_heure_de_mise_a_jour_solide():
             await mettre_a_jour_seuils_auto()
-        await fetch_gold_data()
-        await asyncio.sleep(60)
+        heure = datetime.utcnow().hour
+        if heure >= 4:
+            await fetch_all_sessions()
+        else:
+            await fetch_gold_data("journalier")
+        await asyncio.sleep(1200)
 
 async def mise_en_route():
     await main_loop()
