@@ -101,33 +101,6 @@ async def mettre_a_jour_seuils_auto():
     except Exception as e:
         print(f"[ERREUR] seuils auto : {e}", flush=True)
 
-async def charger_seuils_depuis_notion(session):
-    global SEUILS_MANUELS
-    try:
-        today = datetime.utcnow().date().isoformat()
-        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID, filter={
-            "and": [
-                {"property": "Date", "date": {"equals": today}},
-                {"property": "Session", "select": {"equals": session}}
-            ]
-        }).get("results", [])
-        supports, resistances, pivots = [], [], []
-        for page in pages:
-            props = page["properties"]
-            valeur = props.get("Valeur", {}).get("number")
-            type_ = props.get("Type", {}).get("select", {}).get("name")
-            if valeur is not None:
-                if type_ == "support": supports.append(valeur)
-                elif type_ == "résistance": resistances.append(valeur)
-                elif type_ == "pivot": pivots.append(valeur)
-
-        SEUILS_MANUELS = []
-        for i, val in enumerate(sorted(resistances)): SEUILS_MANUELS.append({"valeur": val, "type": "résistance", "nom": f"R{i+1}"})
-        for val in pivots: SEUILS_MANUELS.append({"valeur": val, "type": "pivot", "nom": "Pivot"})
-        for i, val in enumerate(sorted(supports, reverse=True)): SEUILS_MANUELS.append({"valeur": val, "type": "support", "nom": f"S{i+1}"})
-    except Exception as e:
-        print(f"[ERREUR] chargement seuils {session} : {e}", flush=True)
-
 async def fetch_gold_data(session="journalier"):
     await charger_seuils_depuis_notion(session)
     etat = charger_etat(session)
@@ -180,34 +153,35 @@ async def fetch_gold_data(session="journalier"):
                 elif pivot and s1 and s1 - 0.5 <= last_price < pivot:
                     signal_type = f"🚧📉 +{round(last_price - s1, 2)}$ du S1"
 
-            if signal_type and seuil_casse:
-                if nom_seuil_casse != etat["seuil"]:
-                    compteur = 1
+            if signal_type:
+                if seuil_casse:
+                    if nom_seuil_casse != etat["seuil"]:
+                        compteur = 1
+                    else:
+                        compteur = etat["compteur"] + 1
+                    sauvegarder_etat(session, nom_seuil_casse, compteur)
+                    if compteur >= 5:
+                        signal_type += " 🚧"
+
+                props = {
+                    "Horodatage": {"date": {"start": now.isoformat()}},
+                    "Prix": {"number": float(last_price)},
+                    "Volume": {"number": int(volume)},
+                    "Commentaire": {"rich_text": [{"text": {"content": f"Session : {session}"}}]}
+                }
+
+                if session == "journalier":
+                    props["Signal (journalier)"] = {"title": [{"text": {"content": signal_type}}]}
                 else:
-                    compteur = etat["compteur"] + 1
-                sauvegarder_etat(session, nom_seuil_casse, compteur)
-                if compteur >= 5:
-                    signal_type += " 🚧"
+                    props["Signal (session)"] = {"rich_text": [{"text": {"content": signal_type}}]}
 
-            props = {
-                "Horodatage": {"date": {"start": now.isoformat()}},
-                "Prix": {"number": float(last_price)},
-                "Volume": {"number": int(volume)},
-                "Commentaire": {"rich_text": [{"text": {"content": f"Session : {session}"}}]}
-            }
+                if seuil_casse:
+                    props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
+                    props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
+                    props["TP"] = {"number": calculer_tp(seuil_casse, pivot)}
 
-            if session == "journalier":
-                props["Signal (journalier)"] = {"title": [{"text": {"content": signal_type or "RAS"}}]}
-            else:
-                props["Signal (session)"] = {"rich_text": [{"text": {"content": signal_type or "RAS"}}]}
-
-            if signal_type and seuil_casse:
-                props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
-                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
-                props["TP"] = {"number": calculer_tp(seuil_casse, pivot)}
-
-            notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
-            print(f"[INFO] {session} | {signal_type or 'RAS'} | {last_price}$ | Vol: {volume}", flush=True)
+                notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
+                print(f"[INFO] {session} | {signal_type} | {last_price}$ | Vol: {volume}", flush=True)
 
         except Exception as e:
             print(f"[ERREUR] fetch_gold_data ({session}) : {e}", flush=True)
