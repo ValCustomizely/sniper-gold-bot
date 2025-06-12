@@ -50,6 +50,37 @@ def est_heure_de_mise_a_jour_solide():
     return now.hour == 1 and f"{now.date().isoformat()}_1" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_1")
 
 async def mettre_a_jour_seuils_auto():
+
+async def charger_seuils_depuis_notion(session):
+    global SEUILS_MANUELS
+    try:
+        today = datetime.utcnow().date().isoformat()
+        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID, filter={
+            "and": [
+                {"property": "Date", "date": {"equals": today}},
+                {"property": "Session", "select": {"equals": session}}
+            ]
+        }).get("results", [])
+        supports, resistances, pivots = [], [], []
+        for page in pages:
+            props = page["properties"]
+            valeur = props.get("Valeur", {}).get("number")
+            type_ = props.get("Type", {}).get("select", {}).get("name")
+            if valeur is not None:
+                if type_ == "support": supports.append(valeur)
+                elif type_ == "résistance": resistances.append(valeur)
+                elif type_ == "pivot": pivots.append(valeur)
+
+        SEUILS_MANUELS = []
+        for i, val in enumerate(sorted(resistances)):
+            SEUILS_MANUELS.append({"valeur": val, "type": "résistance", "nom": f"R{i+1}"})
+        for val in pivots:
+            SEUILS_MANUELS.append({"valeur": val, "type": "pivot", "nom": "Pivot"})
+        for i, val in enumerate(sorted(supports, reverse=True)):
+            SEUILS_MANUELS.append({"valeur": val, "type": "support", "nom": f"S{i+1}"})
+    except Exception as e:
+        print(f"[ERREUR] chargement seuils {session} : {e}", flush=True)
+
     try:
         print("[INFO] Mise à jour automatique des seuils", flush=True)
         yesterday = get_last_trading_day().isoformat()
