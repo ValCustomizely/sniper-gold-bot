@@ -116,7 +116,7 @@ async def mettre_a_jour_seuils_us():
             if len(results) < 17:
                 print("[WARN] Pas assez de données horaires pour seuils US", flush=True)
                 return
-            us_range = results[13:17]  # de 13h à 17h UTC
+            us_range = results[13:17]
             high = max(r["h"] for r in us_range)
             low = min(r["l"] for r in us_range)
             close = us_range[-1]["c"]
@@ -125,37 +125,7 @@ async def mettre_a_jour_seuils_us():
     except Exception as e:
         print(f"[ERREUR] seuils us : {e}", flush=True)
 
-async def charger_seuils_depuis_notion():
-    global SEUILS_MANUELS
-    try:
-        today = datetime.utcnow().date().isoformat()
-        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID, filter={"property": "Date", "date": {"equals": today}}).get("results", [])
-        supports, resistances, pivots = [], [], []
-        for page in pages:
-            props = page["properties"]
-            valeur = props.get("Valeur", {}).get("number")
-            type_ = props.get("Type", {}).get("select", {}).get("name")
-            if valeur is not None:
-                if type_ == "support": supports.append(valeur)
-                elif type_ == "résistance": resistances.append(valeur)
-                elif type_ == "pivot": pivots.append(valeur)
-
-        SEUILS_MANUELS = []
-        for i, val in enumerate(sorted(resistances)): SEUILS_MANUELS.append({"valeur": val, "type": "résistance", "nom": f"R{i+1}"})
-        for val in pivots: SEUILS_MANUELS.append({"valeur": val, "type": "pivot", "nom": "Pivot"})
-        for i, val in enumerate(sorted(supports, reverse=True)): SEUILS_MANUELS.append({"valeur": val, "type": "support", "nom": f"S{i+1}"})
-    except Exception as e:
-        print(f"[ERREUR] chargement seuils : {e}", flush=True)
-
-def calculer_tp(seuil_casse, pivot):
-    if seuil_casse is None or pivot is None: return None
-    return round(seuil_casse + (seuil_casse - pivot) * 0.8, 2)
-
-def est_heure_de_mise_a_jour_solide():
-    now = datetime.utcnow()
-    return now.hour == 1 and f"{now.date().isoformat()}_1" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_1")
-
-async def fetch_gold_data():
+async def fetch_gold_data(seuil_source="journalier"):
     await charger_seuils_depuis_notion()
     etat = charger_etat()
     now = datetime.utcnow()
@@ -176,7 +146,6 @@ async def fetch_gold_data():
             volume = candle["v"]
             pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
 
-            # Reset si prix repasse sous le seuil cassé
             seuil_prec = etat["seuil"]
             if seuil_prec:
                 seuil_prec_val = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == seuil_prec), None)
@@ -219,16 +188,21 @@ async def fetch_gold_data():
 
             if signal_type:
                 props = {
-                    "Signal": {"title": [{"text": {"content": signal_type}}]},
                     "Horodatage": {"date": {"start": now.isoformat()}},
                     "Prix": {"number": float(last_price)},
                     "Volume": {"number": int(volume)},
                     "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]}
                 }
+
+                if seuil_source == "journalier":
+                    props["Signal (journalier)"] = {"rich_text": [{"text": {"content": signal_type}}]}
+                else:
+                    props["Signal (session)"] = {"rich_text": [{"text": {"content": signal_type}}]}
+
                 if seuil_casse:
                     props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
                     props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
-                    props["TP"] = {"number": calculer_tp(seuil_casse, pivot)}
+                    props["TP"] = {"number": round(seuil_casse + (seuil_casse - pivot) * 0.8, 2) if pivot else None}
 
                 notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
                 print(f"[INFO] {signal_type} | {last_price}$ | Vol: {volume}", flush=True)
