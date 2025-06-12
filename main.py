@@ -1,6 +1,7 @@
 import asyncio
 import httpx
 import os
+import json
 from datetime import datetime, timedelta
 from notion_client import Client
 
@@ -11,8 +12,18 @@ SEUILS_DATABASE_ID = os.environ["SEUILS_DATABASE_ID"]
 
 SEUILS_MANUELS = []
 DERNIERE_MAJ_HORAIRES = set()
-DERNIER_SEUIL_CASSE = None
-COMPTEUR_APRES_CASSURE = 0
+
+ETAT_PATH = "etat_cassure.json"
+
+def charger_etat():
+    if not os.path.exists(ETAT_PATH):
+        return {"seuil": None, "compteur": 0}
+    with open(ETAT_PATH, "r") as f:
+        return json.load(f)
+
+def sauvegarder_etat(seuil, compteur):
+    with open(ETAT_PATH, "w") as f:
+        json.dump({"seuil": seuil, "compteur": compteur}, f)
 
 def get_last_trading_day():
     today = datetime.utcnow().date()
@@ -28,8 +39,7 @@ def get_last_trading_day():
 
 async def mettre_a_jour_seuils_auto():
     try:
-        print("[INFO] Mise à jour automatique des seuils (calcul depuis Polygon)", flush=True)
-
+        print("[INFO] Mise à jour automatique des seuils", flush=True)
         yesterday = get_last_trading_day().isoformat()
         today = datetime.utcnow().date().isoformat()
         url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/day/{yesterday}/{yesterday}"
@@ -41,19 +51,15 @@ async def mettre_a_jour_seuils_auto():
                 "limit": 1,
                 "apiKey": POLYGON_API_KEY
             }, timeout=10)
-
             response.raise_for_status()
             results = response.json().get("results", [])
 
             if not results:
-                print("[WARN] Aucune donnée reçue de Polygon pour la veille", flush=True)
+                print("[WARN] Aucune donnée Polygon", flush=True)
                 return
 
             candle = results[0]
-            high = candle["h"]
-            low = candle["l"]
-            close = candle["c"]
-
+            high, low, close = candle["h"], candle["l"], candle["c"]
             pivot = round((high + low + close) / 3, 2)
             r1 = round((2 * pivot) - low, 2)
             s1 = round((2 * pivot) - high, 2)
@@ -73,116 +79,81 @@ async def mettre_a_jour_seuils_auto():
             ]
 
             for seuil in seuils:
-                notion.pages.create(
-                    parent={"database_id": SEUILS_DATABASE_ID},
-                    properties={
-                        "Valeur": {"number": seuil["valeur"]},
-                        "Type": {"select": {"name": seuil["type"]}},
-                        "Date": {"date": {"start": today}}
-                    }
-                )
-
-            print(f"[INFO] 7 seuils enregistrés pour {today} (données du {yesterday})", flush=True)
-
+                notion.pages.create(parent={"database_id": SEUILS_DATABASE_ID}, properties={
+                    "Valeur": {"number": seuil["valeur"]},
+                    "Type": {"select": {"name": seuil["type"]}},
+                    "Date": {"date": {"start": today}}
+                })
+            print(f"[INFO] Seuils mis à jour pour {today}", flush=True)
     except Exception as e:
-        print(f"[ERREUR] dans mettre_a_jour_seuils_auto : {e}", flush=True)
+        print(f"[ERREUR] seuils auto : {e}", flush=True)
 
 async def charger_seuils_depuis_notion():
     global SEUILS_MANUELS
     try:
         today = datetime.utcnow().date().isoformat()
-        pages = notion.databases.query(
-            database_id=SEUILS_DATABASE_ID,
-            filter={"property": "Date", "date": {"equals": today}}
-        ).get("results", [])
-
-        supports = []
-        resistances = []
-        pivots = []
-
+        pages = notion.databases.query(database_id=SEUILS_DATABASE_ID, filter={"property": "Date", "date": {"equals": today}}).get("results", [])
+        supports, resistances, pivots = [], [], []
         for page in pages:
             props = page["properties"]
             valeur = props.get("Valeur", {}).get("number")
             type_ = props.get("Type", {}).get("select", {}).get("name")
             if valeur is not None:
-                if type_ == "support":
-                    supports.append(valeur)
-                elif type_ == "résistance":
-                    resistances.append(valeur)
-                elif type_ == "pivot":
-                    pivots.append(valeur)
+                if type_ == "support": supports.append(valeur)
+                elif type_ == "résistance": resistances.append(valeur)
+                elif type_ == "pivot": pivots.append(valeur)
 
         SEUILS_MANUELS = []
-        for i, val in enumerate(sorted(resistances)):
-            SEUILS_MANUELS.append({"valeur": val, "type": "résistance", "nom": f"R{i+1}"})
-        for val in pivots:
-            SEUILS_MANUELS.append({"valeur": val, "type": "pivot", "nom": "Pivot"})
-        for i, val in enumerate(sorted(supports, reverse=True)):
-            SEUILS_MANUELS.append({"valeur": val, "type": "support", "nom": f"S{i+1}"})
-
-        print(f"[INFO] {len(SEUILS_MANUELS)} seuils chargés depuis Notion", flush=True)
+        for i, val in enumerate(sorted(resistances)): SEUILS_MANUELS.append({"valeur": val, "type": "résistance", "nom": f"R{i+1}"})
+        for val in pivots: SEUILS_MANUELS.append({"valeur": val, "type": "pivot", "nom": "Pivot"})
+        for i, val in enumerate(sorted(supports, reverse=True)): SEUILS_MANUELS.append({"valeur": val, "type": "support", "nom": f"S{i+1}"})
     except Exception as e:
         print(f"[ERREUR] chargement seuils : {e}", flush=True)
+
+def calculer_tp(seuil_casse, pivot):
+    if seuil_casse is None or pivot is None: return None
+    return round(seuil_casse + (seuil_casse - pivot) * 0.8, 2)
 
 def est_heure_de_mise_a_jour_solide():
     now = datetime.utcnow()
     return now.hour == 1 and f"{now.date().isoformat()}_1" not in DERNIERE_MAJ_HORAIRES and not DERNIERE_MAJ_HORAIRES.add(f"{now.date().isoformat()}_1")
 
-def calculer_tp(seuil_casse, pivot):
-    if seuil_casse is None or pivot is None:
-        return None
-    return round(seuil_casse + (seuil_casse - pivot) * 0.8, 2)
-
 async def fetch_gold_data():
-    global DERNIER_SEUIL_CASSE, COMPTEUR_APRES_CASSURE
-
-    now = datetime.utcnow()
-    print(f"[fetch_gold_data] Début de la récupération à {now.isoformat()}", flush=True)
-
     await charger_seuils_depuis_notion()
-
-    if not SEUILS_MANUELS:
-        print("[WARN] Aucun seuil trouvé, mise à jour forcée...", flush=True)
-        await mettre_a_jour_seuils_auto()
-        await charger_seuils_depuis_notion()
-
+    etat = charger_etat()
+    now = datetime.utcnow()
     today = now.date().isoformat()
     url = f"https://api.polygon.io/v2/aggs/ticker/C:XAUUSD/range/1/minute/{today}/{today}"
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(url, params={
-                "adjusted": "true",
-                "sort": "desc",
-                "limit": 1,
-                "apiKey": POLYGON_API_KEY
-            }, timeout=10)
+            response = await client.get(url, params={"adjusted": "true", "sort": "desc", "limit": 1, "apiKey": POLYGON_API_KEY}, timeout=10)
             response.raise_for_status()
             results = response.json().get("results", [])
-
             if not results:
-                print("[ERREUR] Aucune donnée reçue", flush=True)
+                print("[ERREUR] Pas de donnée minute", flush=True)
                 return
 
             candle = results[0]
             last_price = candle["c"]
             volume = candle["v"]
+            pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
+
+            # Reset si prix repasse sous le seuil cassé
+            seuil_prec = etat["seuil"]
+            if seuil_prec:
+                seuil_prec_val = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == seuil_prec), None)
+                if seuil_prec_val:
+                    if (seuil_prec.startswith("R") and last_price <= seuil_prec_val - 0.2) or (seuil_prec.startswith("S") and last_price >= seuil_prec_val + 0.2):
+                        sauvegarder_etat(None, 0)
+                        etat = {"seuil": None, "compteur": 0}
+
+            cassures_resistances = [(s["valeur"], s["nom"]) for s in SEUILS_MANUELS if s["type"] == "résistance" and last_price > s["valeur"] + 0.5]
+            cassures_supports = [(s["valeur"], s["nom"]) for s in SEUILS_MANUELS if s["type"] == "support" and last_price < s["valeur"] - 0.5]
 
             signal_type = None
             seuil_casse = None
             nom_seuil_casse = None
-            pivot = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "Pivot"), None)
-
-            cassures_resistances = [
-                (seuil["valeur"], seuil["nom"])
-                for seuil in SEUILS_MANUELS
-                if seuil["type"] == "résistance" and last_price > seuil["valeur"] + 0.5
-            ]
-            cassures_supports = [
-                (seuil["valeur"], seuil["nom"])
-                for seuil in SEUILS_MANUELS
-                if seuil["type"] == "support" and last_price < seuil["valeur"] - 0.5
-            ]
 
             if cassures_resistances:
                 seuil_casse, nom_seuil_casse = max(cassures_resistances, key=lambda x: x[0])
@@ -195,64 +166,52 @@ async def fetch_gold_data():
             else:
                 r1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "R1"), None)
                 s1 = next((s["valeur"] for s in SEUILS_MANUELS if s["nom"] == "S1"), None)
-
                 if pivot and r1 and pivot < last_price <= r1 + 0.5:
-                    ecart = round(r1 - last_price, 2)
-                    signal_type = f"🚧📈 -{abs(ecart)}$ du R1"
+                    signal_type = f"🚧📈 -{round(r1 - last_price, 2)}$ du R1"
                 elif pivot and s1 and s1 - 0.5 <= last_price < pivot:
-                    ecart = round(last_price - s1, 2)
-                    signal_type = f"🚧📉 +{abs(ecart)}$ du S1"
+                    signal_type = f"🚧📉 +{round(last_price - s1, 2)}$ du S1"
 
-            if not signal_type:
-                print("[WARN] Aucun signal défini (devrait être impossible)", flush=True)
-                return
-
-            if seuil_casse:
-                if nom_seuil_casse != DERNIER_SEUIL_CASSE:
-                    DERNIER_SEUIL_CASSE = nom_seuil_casse
-                    COMPTEUR_APRES_CASSURE = 1
+            if signal_type and seuil_casse:
+                if nom_seuil_casse != etat["seuil"]:
+                    compteur = 1
                 else:
-                    COMPTEUR_APRES_CASSURE += 1
-                if COMPTEUR_APRES_CASSURE >= 5:
+                    compteur = etat["compteur"] + 1
+                sauvegarder_etat(nom_seuil_casse, compteur)
+                if compteur >= 5:
                     signal_type += " 🚧"
 
-            print(f"[SIGNAL] {signal_type} | {last_price} USD | Vol: {volume}", flush=True)
+            if signal_type:
+                props = {
+                    "Signal": {"title": [{"text": {"content": signal_type}}]},
+                    "Horodatage": {"date": {"start": now.isoformat()}},
+                    "Prix": {"number": float(last_price)},
+                    "Volume": {"number": int(volume)},
+                    "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]}
+                }
+                if seuil_casse:
+                    props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
+                    props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
+                    props["TP"] = {"number": calculer_tp(seuil_casse, pivot)}
 
-            props = {
-                "Signal": {"title": [{"text": {"content": signal_type}}]},
-                "Horodatage": {"date": {"start": now.isoformat()}},
-                "Prix": {"number": float(last_price)},
-                "Volume": {"number": int(volume)},
-                "Commentaire": {"rich_text": [{"text": {"content": "Signal via Polygon.io"}}]}
-            }
-
-            if seuil_casse:
-                props["SL"] = {"number": round(seuil_casse - 1, 2) if "📈" in signal_type else round(seuil_casse + 1, 2)}
-                props["SL suiveur"] = {"number": round(last_price + 5, 2) if "📈" in signal_type else round(last_price - 5, 2)}
-                props["TP"] = {"number": calculer_tp(seuil_casse, pivot)}
-
-            notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
-            print("[INFO] Signal ajouté à Notion", flush=True)
+                notion.pages.create(parent={"database_id": NOTION_DATABASE_ID}, properties=props)
+                print(f"[INFO] {signal_type} | {last_price}$ | Vol: {volume}", flush=True)
 
         except Exception as e:
-            print(f"[ERREUR] attrapée dans fetch_gold_data : {e}", flush=True)
+            print(f"[ERREUR] fetch_gold_data : {e}", flush=True)
 
 async def main_loop():
     while True:
-        now = datetime.utcnow()
-        print(f"[TICK] Tick exécuté {now.isoformat()}", flush=True)
         if est_heure_de_mise_a_jour_solide():
             await mettre_a_jour_seuils_auto()
         await fetch_gold_data()
-        print("[PAUSE] Tick terminé, pause de 60s", flush=True)
         await asyncio.sleep(60)
 
 async def mise_en_route():
     await main_loop()
 
 if __name__ == "__main__":
-    print(f"[BOOT] Bot en exécution {datetime.utcnow().isoformat()}", flush=True)
+    print(f"[BOOT] {datetime.utcnow().isoformat()}", flush=True)
     try:
         asyncio.run(mise_en_route())
     except Exception as e:
-        print(f"[ERREUR] critique dans le bot principal : {e}", flush=True)
+        print(f"[ERREUR] critique bot : {e}", flush=True)
